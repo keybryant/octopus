@@ -20,11 +20,11 @@ pnpm dev:noopen # 同上但不打开浏览器
 
 1. 复制 `packages/octopus-quickstart` 目录结构（改包名/插件 id）
 2. `src/index.ts` 中 `ctx.workbench.register({ id, title, order, entry })` 并自托管模块 bundle
-3. 模块 bundle 构建须使用 vendor 改写插件（见 quickstart 的 `web/vite.config.ts`）
+3. 模块 bundle 构建须使用壳提供的 vendor 改写插件：在模块的 `web/vite.config.ts` 中 `import { octopusVendor } from "octopus/vite"` 并加入 plugins
 4. 根 `package.json` 的 `dev`/`dev:noopen` 脚本追加 `./packages/<新包>`
 5. `pnpm dev` 生效
 
-模块契约：bundle 必须 default export 一个 React 组件；react 家族只能命名导入 `react`、`react-dom`、`react/jsx-runtime` 三者（由 vendor 改写插件映射到壳的 `/workbench/assets/vendor/*.js`，其余 react 子路径会构建报错）；托管与注册必须使用同一个 `/octopus/<id>/assets` 前缀；产物目录整体提交（含哈希命名的共享 chunk）。
+模块契约：bundle 必须 default export 一个 React 组件；react 家族只能命名导入 `react`、`react-dom`、`react/jsx-runtime` 三者（由 `octopus/vite` 的改写插件映射到壳托管的 `/workbench/assets/vendor/*.js`，其余 react 子路径会构建报错）；托管与注册必须使用同一个 `/octopus/<id>/assets` 前缀。构建产物不入库（`.gitignore` 已忽略），发布时经 npm `files` 字段携带。
 
 ## 测试与构建
 

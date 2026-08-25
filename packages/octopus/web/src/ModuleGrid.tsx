@@ -29,10 +29,15 @@ class ModuleErrorBoundary extends Component<{ children: ReactNode; title: string
 
 function ModuleCard({ module }: ModuleCardProps) {
   const [open, setOpen] = useState(false)
-  const Lazy = useMemo(() => lazy(() => loadModule(module.entry)), [module.entry])
+  const [attempt, setAttempt] = useState(0)
+  const Lazy = useMemo(() => lazy(() => loadModule(module.entry)), [module.entry, attempt])
+  const toggle = () => {
+    if (open) setAttempt((a) => a + 1)
+    setOpen(!open)
+  }
   return (
     <section className="module-card">
-      <button type="button" className="module-title" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="module-title" onClick={toggle}>
         {module.title}
       </button>
       {open && (

@@ -1,7 +1,7 @@
 node_modules/
 lib/
 web-dist/
-web/dist/
+**/web/dist/
 *.tsbuildinfo
 *.log
 .superpowers/

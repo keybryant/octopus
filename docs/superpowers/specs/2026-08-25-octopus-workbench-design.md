@@ -52,7 +52,7 @@ interface WorkbenchRegistry {
 
 **客户端契约**：模块 bundle 为 Vite library mode 构建的 ES module（`external: [react, react-dom]`），**default export 为 React 组件**；壳用 `React.lazy(() => import(entry))` 挂载。
 
-> **React 共享细节**：浏览器 ESM 不支持裸导入，模块 bundle 通过构建期 resolveId 插件将 `react`、`react-dom`、`react/jsx-runtime` 改写为壳托管的 vendor URL（`/workbench/assets/vendor/{react,react-dom,jsx-runtime}.js`，由壳构建时从依赖打包为自包含 ESM）。功能插件构建模块时须使用该改写插件（见 octopus-quickstart 的 `web/vite.config.ts`）。
+> **React 共享细节**：浏览器 ESM 不支持裸导入，模块 bundle 通过构建期 resolveId 插件将 `react`、`react-dom`、`react/jsx-runtime` 改写为壳托管的 vendor URL（`/workbench/assets/vendor/{react,react-dom,jsx-runtime}.js`，由壳构建时从依赖打包为自包含 ESM）。该改写插件由 octopus 包导出（`import { octopusVendor } from "octopus/vite"`，路径常量 `WORKBENCH_VENDOR_PREFIX` 单一来源），功能插件构建时直接引用。
 
 ## 仓库结构（pnpm workspace）
 
@@ -108,10 +108,10 @@ octopus/                        # monorepo 根
   1. `ctx.provide("workbench", registry)`（内部 Map 存模块，重复 id 抛错，注册返回 disposer）
   2. 注册路由（`ctx.effect` 管理 disposer）：
      - `exact /workbench` → `web-dist/index.html`（`text/html; charset=utf-8`）
-     - `prefix /workbench/assets/vendor` → `web-dist/vendor/`（vendor 契约 URL）；`prefix /workbench/assets` → `web-dist/assets/`（Vite 哈希产物）。两条前缀路由靠 webserver 最长前缀优先语义分工。静态服务：MIME 表（js/css/svg/png/jpg/ico/woff2/json；未知 → octet-stream）、`..` 逃逸 403、缺失 404、非 GET/HEAD 405
+      - `prefix /workbench/assets/vendor` → `web-dist/vendor/`（vendor 契约 URL，路径取 `WORKBENCH_VENDOR_PREFIX`）；`prefix /workbench/assets` → `web-dist/assets/`（Vite 哈希产物，`Cache-Control: public, max-age=31536000, immutable`）。两条前缀路由靠 webserver 最长前缀优先语义分工。静态服务：MIME 表（js/css/svg/png/jpg/ico/woff2/json；未知 → octet-stream）、`..` 逃逸 403、缺失 404、非 GET/HEAD 405
      - `exact /api/octopus/config` → `{ title, greeting }`
      - `exact /api/octopus/modules` → `registry.list()`
-- 失败边界：`web-dist` 缺失时 `/workbench` 返回 503 并提示 `pnpm build`；`webServer` 缺失时静默跳过
+- 失败边界：`web-dist` 缺失时 `/workbench` 返回 503 并提示 `pnpm build`（index.html 首次成功读取后驻留内存）；`webServer` 由 `inject` 声明保证存在，不做运行时兜底
 
 ### octopus-quickstart（示例功能插件）
 

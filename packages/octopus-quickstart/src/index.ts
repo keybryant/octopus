@@ -1,20 +1,13 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import type { Context } from "@deepseek-ai/cordis"
-import { serveStaticFiles, type WebServerLike, type WorkbenchRegistry } from "octopus"
+import { serveStaticFiles } from "octopus"
 
 export const name = "octopus-quickstart"
 export const inject = ["workbench", "webServer"]
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(HERE, "..", "web", "dist")
-
-declare module "@deepseek-ai/cordis" {
-  interface Context {
-    workbench: WorkbenchRegistry
-    webServer: WebServerLike
-  }
-}
 
 export function apply(ctx: Context) {
   ctx.effect(() => {

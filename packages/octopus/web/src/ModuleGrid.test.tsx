@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import ModuleGrid from "./ModuleGrid"
 import { loadModule } from "./loadModule"
 
@@ -11,6 +11,10 @@ vi.mock("./loadModule", () => ({
 const mockedLoadModule = vi.mocked(loadModule)
 
 describe("ModuleGrid", () => {
+  beforeEach(() => {
+    mockedLoadModule.mockReset()
+  })
+
   it("renders nothing when there are no modules", () => {
     const { container } = render(<ModuleGrid modules={[]} />)
     expect(container).toBeEmptyDOMElement()
@@ -28,9 +32,22 @@ describe("ModuleGrid", () => {
   })
 
   it("shows an error placeholder when the bundle fails to load", async () => {
-    mockedLoadModule.mockRejectedValue(new Error("boom"))
+    mockedLoadModule.mockRejectedValueOnce(new Error("boom"))
     render(<ModuleGrid modules={[{ id: "quickstart", title: "快捷入口", entry: "/broken.js" }]} />)
     await userEvent.click(screen.getByRole("button", { name: "快捷入口" }))
     expect(await screen.findByText("模块 快捷入口 加载失败")).toBeInTheDocument()
+  })
+
+  it("retries a failed module after collapsing and expanding again", async () => {
+    mockedLoadModule.mockRejectedValueOnce(new Error("boom"))
+    mockedLoadModule.mockResolvedValueOnce({ default: () => <div>已加载</div> })
+    render(<ModuleGrid modules={[{ id: "quickstart", title: "快捷入口", entry: "/flaky.js" }]} />)
+    const button = screen.getByRole("button", { name: "快捷入口" })
+    await userEvent.click(button)
+    expect(await screen.findByText("模块 快捷入口 加载失败")).toBeInTheDocument()
+    await userEvent.click(button)
+    await userEvent.click(button)
+    expect(await screen.findByText("已加载")).toBeInTheDocument()
+    expect(mockedLoadModule).toHaveBeenCalledTimes(2)
   })
 })

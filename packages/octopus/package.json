@@ -10,6 +10,10 @@
       "types": "./lib/types/index.d.ts",
       "default": "./lib/index.js"
     },
+    "./vite": {
+      "types": "./lib/types/vite-plugin.d.ts",
+      "default": "./lib/vite-plugin.js"
+    },
     "./package.json": "./package.json"
   },
   "files": ["lib", "web-dist", "cordis.patch.yml", "README.md"],

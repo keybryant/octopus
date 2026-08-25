@@ -81,4 +81,19 @@ describe("serveStaticFiles", () => {
     await handler({ method: "GET", url: "/workbench/assets/%zz" }, res)
     expect(res.calls[0].status).toBe(400)
   })
+
+  it("passes cache-control through when configured", async () => {
+    const cached = serveStaticFiles(root, "/workbench/assets", {
+      cacheControl: "public, max-age=31536000, immutable",
+    })
+    const res = createRes()
+    await cached({ method: "GET", url: "/workbench/assets/index.js" }, res)
+    expect(res.calls[0].headers["cache-control"]).toBe("public, max-age=31536000, immutable")
+  })
+
+  it("omits cache-control by default", async () => {
+    const res = createRes()
+    await handler({ method: "GET", url: "/workbench/assets/index.js" }, res)
+    expect(res.calls[0].headers["cache-control"]).toBeUndefined()
+  })
 })

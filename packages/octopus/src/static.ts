@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises"
 import { extname, resolve, sep } from "node:path"
 
-export const MIME_TYPES: Record<string, string> = {
+const MIME_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
@@ -25,8 +25,15 @@ export interface HttpResponse {
   end(body?: string | Uint8Array): void
 }
 
-export function serveStaticFiles(rootDir: string, basePath: string) {
+export interface ServeStaticOptions {
+  cacheControl?: string
+}
+
+export function serveStaticFiles(rootDir: string, basePath: string, options: ServeStaticOptions = {}) {
   const root = resolve(rootDir)
+  const extraHeaders: Record<string, string> = options.cacheControl
+    ? { "cache-control": options.cacheControl }
+    : {}
   return async function handler(req: HttpRequest, res: HttpResponse) {
     const method = (req.method ?? "GET").toUpperCase()
     if (method !== "GET" && method !== "HEAD") {
@@ -65,6 +72,7 @@ export function serveStaticFiles(rootDir: string, basePath: string) {
     res.writeHead(200, {
       "content-type": type,
       "content-length": String(content.length),
+      ...extraHeaders,
     })
     if (method === "HEAD") {
       res.end()
