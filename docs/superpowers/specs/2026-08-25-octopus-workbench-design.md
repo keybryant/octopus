@@ -52,6 +52,8 @@ interface WorkbenchRegistry {
 
 **客户端契约**：模块 bundle 为 Vite library mode 构建的 ES module（`external: [react, react-dom]`），**default export 为 React 组件**；壳用 `React.lazy(() => import(entry))` 挂载。
 
+> **React 共享细节**：浏览器 ESM 不支持裸导入，模块 bundle 通过构建期 resolveId 插件将 `react`、`react-dom`、`react/jsx-runtime` 改写为壳托管的 vendor URL（`/workbench/assets/vendor/{react,react-dom,jsx-runtime}.js`，由壳构建时从依赖打包为自包含 ESM）。功能插件构建模块时须使用该改写插件（见 octopus-quickstart 的 `web/vite.config.ts`）。
+
 ## 仓库结构（pnpm workspace）
 
 ```

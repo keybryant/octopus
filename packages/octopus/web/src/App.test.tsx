@@ -6,7 +6,7 @@ import { timeGreeting } from "./greeting"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn(),
-  fetchModules: vi.fn(),
+  fetchModules: vi.fn().mockResolvedValue([]),
 }))
 
 const mockedFetchConfig = vi.mocked(fetchConfig)
@@ -40,6 +40,15 @@ describe("App", () => {
     expect(screen.getByRole("link", { name: "进入主界面" })).toHaveAttribute("href", "/")
     expect(screen.getByRole("link", { name: "插件市场" })).toHaveAttribute("href", "/marketplace")
     expect(screen.getByRole("link", { name: "设置" })).toHaveAttribute("href", "/settings")
+  })
+
+  it("renders module cards from the modules api", async () => {
+    const { fetchModules } = await import("./api")
+    vi.mocked(fetchModules).mockResolvedValue([
+      { id: "quickstart", title: "快捷入口", entry: "/octopus/quickstart/assets/index.js" },
+    ])
+    render(<App />)
+    expect(await screen.findByRole("button", { name: "快捷入口" })).toBeInTheDocument()
   })
 })
 

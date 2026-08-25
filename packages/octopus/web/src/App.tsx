@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react"
-import { fetchConfig, type WorkbenchConfig } from "./api"
+import { fetchConfig, fetchModules, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
 import { timeGreeting } from "./greeting"
+import ModuleGrid from "./ModuleGrid"
 
 const DEFAULT_TITLE = "My Workbench"
 
 export default function App() {
   const [config, setConfig] = useState<WorkbenchConfig | null>(null)
+  const [modules, setModules] = useState<WorkbenchModuleInfo[]>([])
   useEffect(() => {
     void fetchConfig().then(setConfig)
+    void fetchModules().then(setModules)
   }, [])
   const greeting = config?.greeting || timeGreeting(new Date().getHours())
   return (
@@ -21,6 +24,7 @@ export default function App() {
         <a href="/marketplace">插件市场</a>
         <a href="/settings">设置</a>
       </nav>
+      <ModuleGrid modules={modules} />
     </main>
   )
 }
