@@ -18,3 +18,4 @@ export {
   type DropdownMenuItemProps,
 } from "./overlays/dropdown-menu"
 export { Sheet, type SheetProps } from "./overlays/sheet"
+export * from "./icons"

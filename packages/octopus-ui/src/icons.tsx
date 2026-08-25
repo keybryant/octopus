@@ -1,0 +1,31 @@
+/**
+ * lucide-react 统一出口：业务包只允许从这里引入图标。
+ * 按需追加；新增前先确认无语义重复。
+ */
+export {
+  Search,
+  Bell,
+  Settings,
+  ChevronDown,
+  ChevronRight,
+  ChevronLeft,
+  Plus,
+  Check,
+  LoaderCircle,
+  SendHorizontal,
+  Paperclip,
+  X,
+  Columns3,
+  FileText,
+  GitCommitHorizontal,
+  ListFilter,
+  Clock,
+  User,
+  Users,
+  FolderOpen,
+  Layers,
+  SquareCheckBig,
+  Brain,
+  History,
+  ShieldCheck,
+} from "lucide-react"
