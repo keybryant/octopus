@@ -143,6 +143,8 @@ monorepo 根 `package.json` 声明 `devDependencies: { "@deepseek-ai/dsh": "^0.1
 }
 ```
 
+`--config.auto-install-peers=false`：octopus 尚未发布到 npm，禁止 pnpm 在 profile 中尝试从 registry 自动安装 peer（同一次 add 已包含本地 octopus，peer 在安装图中满足）。
+
 ```sh
 pnpm dev        # 一键：装依赖 → 构建 → 挂载插件（幂等）→ 启动 dsh web
 ```
