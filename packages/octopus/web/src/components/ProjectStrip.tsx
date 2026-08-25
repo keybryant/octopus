@@ -1,0 +1,83 @@
+import { Avatar, Button, ProgressBar } from "octopus-ui"
+import { Columns3, FileText, Plus } from "octopus-ui"
+import type { ProjectSummary } from "../lib/types"
+
+export interface ProjectStripProps {
+  summary: ProjectSummary
+  onOpenKanban: () => void
+  onOpenRequirements: () => void
+}
+
+interface MetricProps {
+  value: string | number
+  suffix?: string
+  label: string
+  /** 逾期等告警色 */
+  warn?: boolean
+}
+
+function Metric({ value, suffix, label, warn }: MetricProps) {
+  return (
+    <div>
+      <div className="font-mono text-[15px] leading-tight">
+        <span className={warn ? "text-warn" : undefined}>{value}</span>
+        {suffix && <span className="text-xs text-text-faint">{suffix}</span>}
+      </div>
+      <div className="mt-0.5 text-[10.5px] text-text-faint">{label}</div>
+    </div>
+  )
+}
+
+export function ProjectStrip({ summary, onOpenKanban, onOpenRequirements }: ProjectStripProps) {
+  const shown = summary.members.slice(0, 3)
+  const rest = summary.members.length - shown.length
+
+  return (
+    <section className="flex h-14 shrink-0 items-center gap-6 border-b border-border bg-background px-6">
+      {/* 整体进度 */}
+      <div className="min-w-44">
+        <div className="mb-1 flex items-baseline justify-between">
+          <span className="text-[11px] text-muted-foreground">整体进度</span>
+          <span className="font-mono text-xs text-accent">{summary.progressPct}%</span>
+        </div>
+        <ProgressBar value={summary.progressPct} />
+      </div>
+
+      <div className="h-7 w-px bg-border" />
+
+      <Metric value={summary.weeklyDone} suffix={`/${summary.weeklyTotal}`} label="本周任务" />
+      <Metric value={summary.activeRequirements} label="活跃需求" />
+      <Metric value={summary.overdue} label="逾期" warn={summary.overdue > 0} />
+      <Metric value={summary.dueDate} label="迭代截止" />
+
+      <div className="h-7 w-px bg-border" />
+
+      {/* 成员叠放 */}
+      <div className="flex -space-x-1.5">
+        {shown.map((m) => (
+          <Avatar key={m.initials} initials={m.initials} size="sm" className="border-2 border-background" />
+        ))}
+        {rest > 0 && (
+          <span className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-background bg-surface text-[9px] text-text-faint">
+            +{rest}
+          </span>
+        )}
+      </div>
+
+      <span className="flex-1" />
+
+      <Button variant="ghost" size="sm" onClick={onOpenRequirements}>
+        <FileText className="h-3.5 w-3.5" />
+        需求池
+      </Button>
+      <Button variant="ghost" size="sm" onClick={onOpenKanban}>
+        <Columns3 className="h-3.5 w-3.5" />
+        任务看板
+      </Button>
+      <Button variant="primary" size="sm">
+        <Plus className="h-3.5 w-3.5" />
+        新建需求
+      </Button>
+    </section>
+  )
+}
