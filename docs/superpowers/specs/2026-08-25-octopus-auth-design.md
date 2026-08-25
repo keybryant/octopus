@@ -210,6 +210,8 @@ bootstrapAdmin: { username: string; password: string }?  # 仅当用户表为空
 
 **自我保护规则**：不能禁用或删除自己；不能使最后一个可用 admin 消失（删除或降级均拒绝）。
 
+**输入校验**：username trim 后非空且不含空白字符；password 最短 8 位；重复用户名返回 409 `{error:'conflict'}`；不合法输入一律 400。
+
 **用户名枚举防护**：凭据校验走恒定工作量路径——用户不存在时仍执行一次 dummy scrypt 校验后再返回统一的失败信息。
 
 **路由评审规则**：所有变更操作必须是非 GET 方法（写入测试断言）。
