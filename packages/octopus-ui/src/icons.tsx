@@ -15,6 +15,8 @@ export {
   SendHorizontal,
   Paperclip,
   X,
+  Archive,
+  CheckSquare,
   Columns3,
   Blocks,
   FileText,
