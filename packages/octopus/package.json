@@ -14,8 +14,8 @@
   },
   "files": ["lib", "web-dist", "cordis.patch.yml", "README.md"],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && vite build --config web/vite.config.ts && vite build --config web/vendor.config.ts",
-    "test": "vitest run && vitest run --config web/vitest.config.ts"
+    "build": "tsc -p tsconfig.build.json && vite build web --config web/vite.config.ts && vite build web --config web/vendor.config.ts",
+    "test": "vitest run && vitest run --root web"
   },
   "dsh": { "bundle": { "patch": "./cordis.patch.yml" } },
   "dependencies": {
