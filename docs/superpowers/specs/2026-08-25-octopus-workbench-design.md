@@ -108,7 +108,7 @@ octopus/                        # monorepo 根
   1. `ctx.provide("workbench", registry)`（内部 Map 存模块，重复 id 抛错，注册返回 disposer）
   2. 注册路由（`ctx.effect` 管理 disposer）：
      - `exact /workbench` → `web-dist/index.html`（`text/html; charset=utf-8`）
-     - `prefix /workbench/assets` → 静态资源（MIME 表：js/css/svg/png/jpg/ico/woff2/json；路径 `..` 逃逸 403；缺失 404；非 GET/HEAD 405）
+     - `prefix /workbench/assets/vendor` → `web-dist/vendor/`（vendor 契约 URL）；`prefix /workbench/assets` → `web-dist/assets/`（Vite 哈希产物）。两条前缀路由靠 webserver 最长前缀优先语义分工。静态服务：MIME 表（js/css/svg/png/jpg/ico/woff2/json；未知 → octet-stream）、`..` 逃逸 403、缺失 404、非 GET/HEAD 405
      - `exact /api/octopus/config` → `{ title, greeting }`
      - `exact /api/octopus/modules` → `registry.list()`
 - 失败边界：`web-dist` 缺失时 `/workbench` 返回 503 并提示 `pnpm build`；`webServer` 缺失时静默跳过

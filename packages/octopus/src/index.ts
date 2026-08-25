@@ -74,8 +74,13 @@ export function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG> = {})
       webServer.register({ kind: "exact", path: "/workbench", handler: serveIndex }),
       webServer.register({
         kind: "prefix",
+        path: "/workbench/assets/vendor",
+        handler: serveStaticFiles(join(DIST_DIR, "vendor"), "/workbench/assets/vendor"),
+      }),
+      webServer.register({
+        kind: "prefix",
         path: "/workbench/assets",
-        handler: serveStaticFiles(DIST_DIR, "/workbench/assets"),
+        handler: serveStaticFiles(join(DIST_DIR, "assets"), "/workbench/assets"),
       }),
       webServer.register({ kind: "exact", path: "/api/octopus/config", handler: jsonHandler(() => effective) }),
       webServer.register({ kind: "exact", path: "/api/octopus/modules", handler: jsonHandler(() => registry.list()) }),

@@ -47,13 +47,14 @@ describe("apply", () => {
     }))
   })
 
-  it("registers the five routes", () => {
+  it("registers the six routes", () => {
     const { ctx, webServer } = mockContext()
     apply(ctx, {})
     const paths = webServer.register.mock.calls.map(([route]: any[]) => [route.kind, route.path])
     expect(paths).toEqual([
       ["exact", "/workbench/"],
       ["exact", "/workbench"],
+      ["prefix", "/workbench/assets/vendor"],
       ["prefix", "/workbench/assets"],
       ["exact", "/api/octopus/config"],
       ["exact", "/api/octopus/modules"],
@@ -65,8 +66,8 @@ describe("apply", () => {
     apply(ctx, { title: "我的工作台", greeting: "欢迎" })
     const registry = ctx.provide.mock.calls[0][1]
     registry.register({ id: "demo", title: "Demo", entry: "/demo.js" })
-    const configRoute = webServer.register.mock.calls[3][0]
-    const modulesRoute = webServer.register.mock.calls[4][0]
+    const configRoute = webServer.register.mock.calls[4][0]
+    const modulesRoute = webServer.register.mock.calls[5][0]
     const res: any = { calls: [], writeHead(s: number, h: any) { this.calls.push({ s, h, body: "" }) }, end(b: string) { this.calls[this.calls.length - 1].body += b } }
     await configRoute.handler({ method: "GET", url: "/api/octopus/config" }, res)
     expect(res.calls[0].s).toBe(200)
