@@ -16,6 +16,7 @@ export {
   Paperclip,
   X,
   Columns3,
+  Blocks,
   FileText,
   GitCommitHorizontal,
   ListFilter,
