@@ -7,3 +7,14 @@ export { Spinner, type SpinnerProps, type SpinnerSize } from "./primitives/spinn
 export { Input, Textarea, type InputProps, type TextareaProps } from "./primitives/input"
 export { ProgressBar, type ProgressBarProps } from "./primitives/progress"
 export { Avatar, type AvatarProps, type AvatarSize } from "./primitives/avatar"
+export {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  type DropdownMenuContentProps,
+  type DropdownMenuItemProps,
+} from "./overlays/dropdown-menu"
+export { Sheet, type SheetProps } from "./overlays/sheet"
