@@ -1,3 +1,4 @@
+import { createMockAgentClient } from "./agent-client"
 import type {
   AgentClient,
   Artifact,
@@ -191,5 +192,5 @@ export const QUICK_PROMPTS: string[] = [
 
 /** Phase 1 内置 mock 实现；真实后端接入时替换此处 */
 export function createDefaultAgentClient(): AgentClient {
-  throw new Error("implemented in Task 3")
+  return createMockAgentClient()
 }
