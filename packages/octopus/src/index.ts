@@ -70,6 +70,7 @@ export function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG> = {})
   if (!webServer) return
   ctx.effect(() => {
     const disposers = [
+      webServer.register({ kind: "exact", path: "/workbench/", handler: serveIndex }),
       webServer.register({ kind: "exact", path: "/workbench", handler: serveIndex }),
       webServer.register({
         kind: "prefix",

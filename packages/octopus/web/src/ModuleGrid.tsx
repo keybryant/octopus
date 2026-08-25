@@ -17,6 +17,10 @@ class ModuleErrorBoundary extends Component<{ children: ReactNode; title: string
     return { failed: true }
   }
 
+  componentDidCatch(error: Error) {
+    console.error(`[octopus] 模块加载失败: ${error.message}`)
+  }
+
   render() {
     if (this.state.failed) return <ModuleError title={this.props.title} />
     return this.props.children

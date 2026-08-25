@@ -17,6 +17,9 @@ function octopusVendor(): Plugin {
       if (source in VENDOR) {
         return { id: VENDOR[source as keyof typeof VENDOR], external: true }
       }
+      if (/^react(-dom)?(\/|$)/.test(source)) {
+        throw new Error(`[octopus-vendor] 未映射的 react 导入: ${source}（请将其加入 VENDOR 映射）`)
+      }
       return null
     },
   }

@@ -24,6 +24,8 @@ pnpm dev:noopen # 同上但不打开浏览器
 4. 根 `package.json` 的 `dev`/`dev:noopen` 脚本追加 `./packages/<新包>`
 5. `pnpm dev` 生效
 
+模块契约：bundle 必须 default export 一个 React 组件；react 家族只能命名导入 `react`、`react-dom`、`react/jsx-runtime` 三者（由 vendor 改写插件映射到壳的 `/workbench/assets/vendor/*.js`，其余 react 子路径会构建报错）；托管与注册必须使用同一个 `/octopus/<id>/assets` 前缀；产物目录整体提交（含哈希命名的共享 chunk）。
+
 ## 测试与构建
 
 ```sh
