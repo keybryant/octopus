@@ -7,7 +7,7 @@ interface ModuleCardProps {
 }
 
 function ModuleError({ title }: { title: string }) {
-  return <div className="module-error">模块 {title} 加载失败</div>
+  return <div className="mt-3 text-sm text-danger">模块 {title} 加载失败</div>
 }
 
 class ModuleErrorBoundary extends Component<{ children: ReactNode; title: string }, { failed: boolean }> {
@@ -36,13 +36,13 @@ function ModuleCard({ module }: ModuleCardProps) {
     setOpen(!open)
   }
   return (
-    <section className="module-card">
-      <button type="button" className="module-title" onClick={toggle}>
+    <section className="rounded-xl border border-border bg-surface p-4">
+      <button type="button" className="cursor-pointer bg-none p-0 text-base font-semibold" onClick={toggle}>
         {module.title}
       </button>
       {open && (
         <ModuleErrorBoundary title={module.title}>
-          <Suspense fallback={<div className="module-loading">加载中…</div>}>
+          <Suspense fallback={<div className="mt-3 text-sm opacity-70">加载中…</div>}>
             <Lazy />
           </Suspense>
         </ModuleErrorBoundary>
@@ -52,9 +52,11 @@ function ModuleCard({ module }: ModuleCardProps) {
 }
 
 export default function ModuleGrid({ modules }: { modules: WorkbenchModuleInfo[] }) {
-  if (modules.length === 0) return null
+  if (modules.length === 0) {
+    return <div className="text-[13px] text-text-faint">暂无已装模块</div>
+  }
   return (
-    <section className="modules">
+    <section className="grid w-full grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
       {modules.map((module) => (
         <ModuleCard key={module.id} module={module} />
       ))}

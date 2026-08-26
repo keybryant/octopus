@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+﻿import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import ModuleGrid from "./ModuleGrid"
@@ -15,9 +15,9 @@ describe("ModuleGrid", () => {
     mockedLoadModule.mockReset()
   })
 
-  it("renders nothing when there are no modules", () => {
-    const { container } = render(<ModuleGrid modules={[]} />)
-    expect(container).toBeEmptyDOMElement()
+  it("shows an empty hint when there are no modules", () => {
+    render(<ModuleGrid modules={[]} />)
+    expect(screen.getByText("暂无已装模块")).toBeInTheDocument()
   })
 
   it("renders a card per module and lazy-loads its bundle on click", async () => {

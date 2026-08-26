@@ -1,0 +1,139 @@
+/* ============================================================
+ * octopus-ui tokens — 唯一真源
+ * 三段式：--palette-*（原始，页面禁用）→ --brand-* → --color-*
+ * 亮暗：<html data-mode="light|dark">，缺省跟随系统
+ * 品牌：<html data-theme="default|ocean|…">
+ * ============================================================ */
+
+/* ── 第1层：色板（原始值，仅本文件与组件内部可用）── */
+:root {
+  /* 暗色（v5 视觉基准）*/
+  --palette-base-dark: #0b0f17;
+  --palette-raised-dark: #0f1420;
+  --palette-surface-dark: #131926;
+  --palette-hover-dark: #182032;
+  --palette-line1-dark: #1e2636;
+  --palette-line2-dark: #2a3448;
+  --palette-text-dark: #e6eaf2;
+  --palette-text2-dark: #8b94a7;
+  --palette-text3-dark: #5c6577;
+  --palette-brand-dark: #34d399;
+  --palette-on-brand-dark: #06281c;
+  --palette-info-dark: #60a5fa;
+  --palette-warn-dark: #fb923c;
+  --palette-danger-dark: #e5484d;
+
+  /* 亮色 */
+  --palette-white: #ffffff;
+  --palette-base-light: #f8fafc;
+  --palette-surface-light: #f1f5f9;
+  --palette-hover-light: #e2e8f0;
+  --palette-line1-light: #e2e8f0;
+  --palette-line2-light: #cbd5e1;
+  --palette-text-light: #0f172a;
+  --palette-text2-light: #475569;
+  --palette-text3-light: #94a3b8;
+  --palette-brand-light: #059669;
+  --palette-on-brand-light: #ffffff;
+  --palette-info-light: #2563eb;
+  --palette-warn-light: #ea580c;
+  --palette-danger-light: #dc2626;
+}
+
+/* ── 第2层：品牌映射 ── */
+:root {
+  --brand-primary: var(--palette-brand-light);
+  --brand-on-primary: var(--palette-on-brand-light);
+}
+[data-theme="ocean"] {
+  --brand-primary: var(--palette-info-light);
+}
+
+/* ── 第3层：语义（亮色默认）── */
+:root {
+  color-scheme: light;
+  --color-bg: var(--palette-white);
+  --color-surface: var(--palette-surface-light);
+  --color-hover: var(--palette-hover-light);
+  --color-border: var(--palette-line1-light);
+  --color-border-strong: var(--palette-line2-light);
+  --color-text: var(--palette-text-light);
+  --color-text-muted: var(--palette-text2-light);
+  --color-text-faint: var(--palette-text3-light);
+  --color-accent: var(--brand-primary);
+  --color-accent-fg: var(--brand-on-primary);
+  --color-info: var(--palette-info-light);
+  --color-warn: var(--palette-warn-light);
+  --color-danger: var(--palette-danger-light);
+}
+
+/* 暗色维度 */
+[data-mode="dark"] {
+  color-scheme: dark;
+  --brand-primary: var(--palette-brand-dark);
+  --brand-on-primary: var(--palette-on-brand-dark);
+  --color-bg: var(--palette-base-dark);
+  --color-surface: var(--palette-surface-dark);
+  --color-hover: var(--palette-hover-dark);
+  --color-border: var(--palette-line1-dark);
+  --color-border-strong: var(--palette-line2-dark);
+  --color-text: var(--palette-text-dark);
+  --color-text-muted: var(--palette-text2-dark);
+  --color-text-faint: var(--palette-text3-dark);
+  --color-accent: var(--brand-primary);
+  --color-accent-fg: var(--brand-on-primary);
+  --color-info: var(--palette-info-dark);
+  --color-warn: var(--palette-warn-dark);
+  --color-danger: var(--palette-danger-dark);
+}
+[data-theme="ocean"][data-mode="dark"] {
+  --brand-primary: var(--palette-info-dark);
+  --brand-on-primary: var(--palette-base-dark);
+}
+
+/* 未手动指定时跟随系统 */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode]) {
+    color-scheme: dark;
+    --brand-primary: var(--palette-brand-dark);
+    --brand-on-primary: var(--palette-on-brand-dark);
+    --color-bg: var(--palette-base-dark);
+    --color-surface: var(--palette-surface-dark);
+    --color-hover: var(--palette-hover-dark);
+    --color-border: var(--palette-line1-dark);
+    --color-border-strong: var(--palette-line2-dark);
+    --color-text: var(--palette-text-dark);
+    --color-text-muted: var(--palette-text2-dark);
+    --color-text-faint: var(--palette-text3-dark);
+    --color-accent: var(--brand-primary);
+    --color-accent-fg: var(--brand-on-primary);
+    --color-info: var(--palette-info-dark);
+    --color-warn: var(--palette-warn-dark);
+    --color-danger: var(--palette-danger-dark);
+  }
+}
+
+/* ── Tailwind v4 注册 ── */
+@theme inline {
+  --color-background: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-surface-hover: var(--color-hover);
+  --color-border: var(--color-border);
+  --color-border-strong: var(--color-border-strong);
+  --color-foreground: var(--color-text);
+  --color-muted-foreground: var(--color-text-muted);
+  --color-faint-foreground: var(--color-text-faint);
+  --color-accent: var(--color-accent);
+  --color-accent-foreground: var(--color-accent-fg);
+  --color-info: var(--color-info);
+  --color-warn: var(--color-warn);
+  --color-danger: var(--color-danger);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}

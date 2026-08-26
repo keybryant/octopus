@@ -1,63 +1,113 @@
-import { render, screen } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+﻿import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
 import { fetchConfig } from "./api"
-import { timeGreeting } from "./greeting"
 
 vi.mock("./api", () => ({
-  fetchConfig: vi.fn(),
+  fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
 }))
-
 const mockedFetchConfig = vi.mocked(fetchConfig)
 
-describe("App", () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 0, 1, 9, 0, 0))
-  })
+describe("App (v5 agent homepage)", () => {
   afterEach(() => {
-    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
-  it("renders default title and time greeting when config fails", async () => {
-    mockedFetchConfig.mockResolvedValue(null)
+  it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
     render(<App />)
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("My Workbench")
-    expect(screen.getByText("早上好")).toBeInTheDocument()
+    expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0) // 切换器 + strip
+    await waitFor(() =>
+      expect(screen.getByText(/当前上下文：Octopus Platform · 迭代 4.2/)).toBeInTheDocument(),
+    )
+    expect(mockedFetchConfig).toHaveBeenCalled()
   })
 
-  it("uses config title and greeting when provided", async () => {
-    mockedFetchConfig.mockResolvedValue({ title: "我的工作台", greeting: "欢迎回来" })
+  it("opens kanban drawer from strip and closes on Esc", async () => {
+    const user = userEvent.setup()
     render(<App />)
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("我的工作台")
-    expect(screen.getByText("欢迎回来")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: "Escape" })
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "任务看板" })).not.toBeInTheDocument(),
+    )
   })
 
-  it("renders quick links", () => {
+  it("chat send round-trip shows assistant cards and artifacts rail", async () => {
+    const user = userEvent.setup()
     render(<App />)
-    expect(screen.getByRole("link", { name: "进入主界面" })).toHaveAttribute("href", "/")
-    expect(screen.getByRole("link", { name: "插件市场" })).toHaveAttribute("href", "/marketplace")
-    expect(screen.getByRole("link", { name: "设置" })).toHaveAttribute("href", "/settings")
+    const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
+    await user.type(box, "列出优先事项")
+    fireEvent.keyDown(box, { key: "Enter" })
+    expect(await screen.findByText("让 Agent 接手 →")).toBeInTheDocument()
+    expect(screen.getByText("本会话产出")).toBeInTheDocument()
   })
 
-  it("renders module cards from the modules api", async () => {
-    const { fetchModules } = await import("./api")
-    vi.mocked(fetchModules).mockResolvedValue([
-      { id: "quickstart", title: "快捷入口", entry: "/octopus/quickstart/assets/index.js" },
-    ])
+  it("artifacts rail collapses and restores", async () => {
+    const user = userEvent.setup()
     render(<App />)
-    expect(await screen.findByRole("button", { name: "快捷入口" })).toBeInTheDocument()
+    await user.click(screen.getByTitle("收起"))
+    expect(screen.queryByText("本会话产出")).not.toBeInTheDocument()
+    await user.click(screen.getByTitle("展开产出面板"))
+    expect(screen.getByText("本会话产出")).toBeInTheDocument()
+  })
+
+  it("project switcher swaps strip metrics", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByTestId("project-switcher"))
+    await user.click(screen.getByText("Merchant Portal"))
+    // 切换后指标随项目变化
+    expect(screen.getByText("迭代 2.8 · 第 3 周")).toBeInTheDocument()
+    expect(screen.getByText("12")).toBeInTheDocument()
+    expect(screen.getByText("/30")).toBeInTheDocument()
   })
 })
 
-describe("timeGreeting", () => {
-  it("greets by hour ranges", () => {
-    expect(timeGreeting(7)).toBe("早上好")
-    expect(timeGreeting(12)).toBe("中午好")
-    expect(timeGreeting(15)).toBe("下午好")
-    expect(timeGreeting(22)).toBe("晚上好")
-    expect(timeGreeting(3)).toBe("晚上好")
+describe("App creation flows", () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it("creates a project via switcher menu and switches to it", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByTestId("project-switcher"))
+    await user.click(screen.getByText("新建项目"))
+    fireEvent.change(screen.getByPlaceholderText(/例如：Octopus Platform/), {
+      target: { value: "Merchant Portal" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建项目" }))
+    // 自动切换到新项目
+    expect(screen.getByText("未排期")).toBeInTheDocument()
+    // 切换器列表中出现新项目
+    await user.click(screen.getByTestId("project-switcher"))
+    expect(screen.getAllByText("Merchant Portal").length).toBeGreaterThan(0)
+  })
+
+  it("creates a requirement via strip button and shows it in drawer", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /新建需求/ }))
+    fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
+      target: { value: "品牌全新的需求条目" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建需求" }))
+
+    await user.click(screen.getAllByRole("button", { name: /需求池/ })[0])
+    expect(await screen.findByText("品牌全新的需求条目")).toBeInTheDocument()
+  })
+
+  it("creates a task via kanban drawer and shows it in 待处理", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    await user.click(await screen.findByRole("button", { name: /新建任务/ }))
+    fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {
+      target: { value: "看板里冒出来的新任务" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建任务" }))
+    expect(await screen.findByText("看板里冒出来的新任务")).toBeInTheDocument()
   })
 })
