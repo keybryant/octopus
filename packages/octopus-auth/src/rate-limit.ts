@@ -5,6 +5,12 @@ export interface RateLimitOptions {
   maxFailures: number
 }
 
+export interface RateLimiter {
+  assertAllowed(bucket: string): void
+  recordFailure(bucket: string): void
+  recordSuccess(bucket: string): void
+}
+
 interface BucketState {
   failures: number
   windowStart: number
@@ -14,7 +20,7 @@ interface BucketState {
 const LOCK_CAP_MS = 64 * 60_000
 const MIN_LOCK_MS = 60_000
 
-export function createRateLimiter(options: RateLimitOptions) {
+export function createRateLimiter(options: RateLimitOptions): RateLimiter {
   const buckets = new Map<string, BucketState>()
 
   return {
