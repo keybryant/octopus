@@ -53,4 +53,15 @@ describe("createRateLimiter", () => {
     vi.setSystemTime(start + OPTS.windowMs + 1 + 2 * 60_000)
     expect(() => rl.assertAllowed("ip1")).not.toThrow()
   })
+
+  it("超过容量上限后清理过期未锁定桶", () => {
+    const start = Date.now()
+    vi.setSystemTime(start)
+    const rl = createRateLimiter(OPTS)
+    for (let i = 0; i < 10_001; i++) rl.recordFailure(`ip-${i}`)
+    expect(rl.size()).toBe(10_001)
+    vi.setSystemTime(start + OPTS.windowMs + 1)
+    rl.recordFailure("fresh")
+    expect(rl.size()).toBe(1)
+  })
 })
