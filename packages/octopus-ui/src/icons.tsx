@@ -31,4 +31,5 @@ export {
   Brain,
   History,
   ShieldCheck,
+  Trash2,
 } from "lucide-react"
