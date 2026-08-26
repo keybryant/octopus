@@ -5,34 +5,13 @@ import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
 import { NewProjectModal } from "./components/NewProjectModal"
-import { NewRequirementModal } from "./components/NewRequirementModal"
 import { ProjectStrip } from "./components/ProjectStrip"
-import { RequirementsDrawer } from "./components/RequirementsDrawer"
 import { TopBar } from "./components/TopBar"
-import {
-  createDefaultAgentClient,
-  KANBAN_COLUMNS,
-  PROJECTS,
-  REQUIREMENTS,
-} from "./lib/datasource"
+import { createDefaultAgentClient, KANBAN_COLUMNS, PROJECTS } from "./lib/datasource"
 import { deriveShortName } from "./lib/short-name"
-import type {
-  Artifact,
-  KanbanColumn,
-  KanbanTask,
-  ProjectSummary,
-  Requirement,
-} from "./lib/types"
+import type { Artifact, KanbanColumn, KanbanTask, ProjectSummary } from "./lib/types"
 
-type DrawerKind = "tasks" | "reqs" | null
-
-function nextId(items: { id: string }[], prefix: string): string {
-  const max = Math.max(
-    ...items.map((i) => Number(i.id.replace(prefix, "")) || 0),
-    prefix === "REQ-" ? 100 : 2800,
-  )
-  return `${prefix}${max + 1}`
-}
+type DrawerKind = "tasks" | null
 
 export default function App() {
   const [config, setConfig] = useState<WorkbenchConfig | null>(null)
@@ -45,14 +24,12 @@ export default function App() {
   const [projectId, setProjectId] = useState(projects[0].id)
   const current = projects.find((p) => p.id === projectId) ?? projects[0]
 
-  // ── 需求 / 看板 ──
-  const [requirements, setRequirements] = useState<Requirement[]>(REQUIREMENTS)
+  // ── 看板 ──
   const [columns, setColumns] = useState<KanbanColumn[]>(KANBAN_COLUMNS)
 
   const [drawer, setDrawer] = useState<DrawerKind>(null)
   const [railCollapsed, setRailCollapsed] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
-  const [newRequirementOpen, setNewRequirementOpen] = useState(false)
 
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const onArtifactsChange = useMemo(() => (a: Artifact[]) => setArtifacts(a), [])
@@ -78,17 +55,6 @@ export default function App() {
     setProjectId(project.id)
   }
 
-  const handleCreateRequirement = (data: { title: string; priority: "P0" | "P1" | "P2" }) => {
-    const req: Requirement = {
-      id: nextId(requirements, "REQ-"),
-      title: data.title,
-      statusBadge: { label: "待排期", tone: "orange" },
-      owner: null,
-      progressPct: 0,
-    }
-    setRequirements((prev) => [req, ...prev])
-  }
-
   const handleCreateTask = (task: KanbanTask) => {
     setColumns((prev) =>
       prev.map((c) => (c.key === task.column ? { ...c, tasks: [task, ...c.tasks] } : c)),
@@ -108,8 +74,6 @@ export default function App() {
         <ProjectStrip
           summary={current}
           onOpenKanban={() => setDrawer("tasks")}
-          onOpenRequirements={() => setDrawer("reqs")}
-          onOpenNewRequirement={() => setNewRequirementOpen(true)}
         />
 
         <div className="flex min-h-0 flex-1">
@@ -128,21 +92,11 @@ export default function App() {
           columns={columns}
           onCreateTask={handleCreateTask}
         />
-        <RequirementsDrawer
-          open={drawer === "reqs"}
-          onClose={() => setDrawer(null)}
-          requirements={requirements}
-        />
 
         <NewProjectModal
           open={newProjectOpen}
           onClose={() => setNewProjectOpen(false)}
           onCreate={handleCreateProject}
-        />
-        <NewRequirementModal
-          open={newRequirementOpen}
-          onClose={() => setNewRequirementOpen(false)}
-          onCreate={handleCreateRequirement}
         />
       </div>
     </ThemeProvider>

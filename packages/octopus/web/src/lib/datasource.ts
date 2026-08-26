@@ -4,7 +4,6 @@ import type {
   Artifact,
   KanbanColumn,
   ProjectSummary,
-  Requirement,
 } from "./types"
 
 export type { AgentClient } from "./types"
@@ -173,13 +172,6 @@ export const KANBAN_COLUMNS: KanbanColumn[] = [
     dotColor: "#34D399",
     tasks: KANBAN_DONE.map((t) => ({ ...t, dimmed: true })),
   },
-]
-
-export const REQUIREMENTS: Requirement[] = [
-  { id: "REQ-118", title: "多租户权限体系升级", statusBadge: { label: "开发中", tone: "blue" }, owner: "张三", progressPct: 48 },
-  { id: "REQ-121", title: "Agent 任务编排可视化", statusBadge: { label: "评审中", tone: "gray" }, owner: "李雯", progressPct: 15 },
-  { id: "REQ-124", title: "CI 流水线缓存加速", statusBadge: { label: "待排期", tone: "orange" }, owner: null, progressPct: 0 },
-  { id: "REQ-115", title: "消息通知中心聚合", statusBadge: { label: "已完成", tone: "green" }, owner: "王倩", progressPct: 100 },
 ]
 
 export const QUICK_PROMPTS: string[] = [

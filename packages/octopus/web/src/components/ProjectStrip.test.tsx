@@ -1,4 +1,4 @@
-﻿import { render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import { currentProject } from "../lib/datasource"
@@ -6,7 +6,7 @@ import { ProjectStrip } from "./ProjectStrip"
 
 describe("ProjectStrip", () => {
   it("renders metrics inline without progress or member stack", () => {
-    render(<ProjectStrip summary={currentProject()} onOpenKanban={() => {}} onOpenRequirements={() => {}} onOpenNewRequirement={() => {}} />)
+    render(<ProjectStrip summary={currentProject()} onOpenKanban={() => {}} />)
     expect(screen.getByText("28")).toBeInTheDocument()
     expect(screen.getByText("/40")).toBeInTheDocument()
     expect(screen.getByText("24")).toBeInTheDocument()
@@ -18,27 +18,21 @@ describe("ProjectStrip", () => {
 
   it("overdue metric uses warn tone when >0", () => {
     const p = { ...currentProject(), overdue: 3 }
-    render(<ProjectStrip summary={p} onOpenKanban={() => {}} onOpenRequirements={() => {}} onOpenNewRequirement={() => {}} />)
+    render(<ProjectStrip summary={p} onOpenKanban={() => {}} />)
     const warn = screen.getAllByText(/3|逾期/).some((el) => el.className.includes("text-warn"))
     expect(warn).toBe(true)
   })
 
-  it("opens kanban and requirements drawers", () => {
+  it("opens kanban drawer", () => {
     const onKanban = vi.fn()
-    const onReqs = vi.fn()
-    render(<ProjectStrip summary={currentProject()} onOpenKanban={onKanban} onOpenRequirements={onReqs} onOpenNewRequirement={() => {}} />)
+    render(<ProjectStrip summary={currentProject()} onOpenKanban={onKanban} />)
     fireEvent.click(screen.getByRole("button", { name: /任务看板/ }))
-    fireEvent.click(screen.getByRole("button", { name: /需求池/ }))
     expect(onKanban).toHaveBeenCalledOnce()
-    expect(onReqs).toHaveBeenCalledOnce()
   })
-})
 
-describe("NewRequirement trigger", () => {
-  it("strip button opens new-requirement modal", () => {
-    const spy = vi.fn()
-    render(<ProjectStrip summary={currentProject()} onOpenKanban={() => {}} onOpenRequirements={() => {}} onOpenNewRequirement={spy} />)
-    fireEvent.click(screen.getByRole("button", { name: /新建需求/ }))
-    expect(spy).toHaveBeenCalledOnce()
+  it("需求入口已移除（需求功能由 octopus-requirements 插件承载）", () => {
+    render(<ProjectStrip summary={currentProject()} onOpenKanban={() => {}} />)
+    expect(screen.queryByRole("button", { name: /需求池/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /新建需求/ })).not.toBeInTheDocument()
   })
 })

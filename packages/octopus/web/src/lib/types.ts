@@ -92,14 +92,6 @@ export interface KanbanColumn {
   tasks: KanbanTask[]
 }
 
-export interface Requirement {
-  id: string
-  title: string
-  statusBadge: Badge
-  owner: string | null
-  progressPct: number
-}
-
 export type Priority = "P0" | "P1" | "P2"
 
 /** NewTaskModal 的表单输出 */

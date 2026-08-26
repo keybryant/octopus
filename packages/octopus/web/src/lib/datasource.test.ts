@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { KANBAN_COLUMNS, PROJECTS, QUICK_PROMPTS, REQUIREMENTS, currentProject } from "./datasource"
+import { KANBAN_COLUMNS, PROJECTS, QUICK_PROMPTS, currentProject } from "./datasource"
 
 describe("datasource", () => {
   it("current project is Octopus Platform with v5 metrics", () => {
@@ -23,10 +23,6 @@ describe("datasource", () => {
   it("kanban covers four columns in order", () => {
     expect(KANBAN_COLUMNS.map((c) => c.key)).toEqual(["todo", "doing", "review", "done"])
     expect(KANBAN_COLUMNS.flatMap((c) => c.tasks).some((t) => t.agentRun)).toBe(true)
-  })
-
-  it("requirements table has REQ-118..115 rows", () => {
-    expect(REQUIREMENTS.map((r) => r.id)).toEqual(["REQ-118", "REQ-121", "REQ-124", "REQ-115"])
   })
 
   it("quick prompts match v5 chips", () => {

@@ -1,4 +1,4 @@
-﻿import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -84,19 +84,6 @@ describe("App creation flows", () => {
     // 切换器列表中出现新项目
     await user.click(screen.getByTestId("project-switcher"))
     expect(screen.getAllByText("Merchant Portal").length).toBeGreaterThan(0)
-  })
-
-  it("creates a requirement via strip button and shows it in drawer", async () => {
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByRole("button", { name: /新建需求/ }))
-    fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
-      target: { value: "品牌全新的需求条目" },
-    })
-    await user.click(screen.getByRole("button", { name: "创建需求" }))
-
-    await user.click(screen.getAllByRole("button", { name: /需求池/ })[0])
-    expect(await screen.findByText("品牌全新的需求条目")).toBeInTheDocument()
   })
 
   it("creates a task via kanban drawer and shows it in 待处理", async () => {
