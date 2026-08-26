@@ -37,10 +37,11 @@ describe("TopBar", () => {
     expect(screen.queryByRole("link", { name: "插件市场" })).not.toBeInTheDocument()
   })
 
-  it("opens modules drawer entry", async () => {
+  it("settings menu opens installed-modules entry (topbar icon removed)", async () => {
     const user = userEvent.setup()
     render(<TopBar {...props} />)
-    await user.click(screen.getByRole("button", { name: "已装模块" }))
+    await user.click(screen.getByLabelText("设置"))
+    await user.click(screen.getByText("已装模块"))
     expect(props.onOpenModules).toHaveBeenCalledOnce()
   })
 })

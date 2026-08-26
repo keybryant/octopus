@@ -1,6 +1,5 @@
 import {
   Badge,
-  Button,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -8,7 +7,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "octopus-ui"
-import { Bell, Check, ChevronDown, Plus, Search, Settings, Blocks } from "octopus-ui"
+import { Check, ChevronDown, Plus, Search, Settings } from "octopus-ui"
 import type { ProjectSummary } from "../lib/types"
 import { OctoLogo } from "./OctoLogo"
 
@@ -83,11 +82,6 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModu
 
       <span className="flex-1" />
 
-      {/* 已装模块 */}
-      <Button variant="ghost" size="sm" onClick={onOpenModules} title="已装模块" aria-label="已装模块" className={iconBtn}>
-        <Blocks className="h-4 w-4" />
-      </Button>
-
       {/* 设置 */}
       <DropdownMenu>
         <DropdownMenuTrigger title="设置" className={iconBtn} aria-label="设置">
@@ -98,6 +92,7 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModu
           <DropdownMenuItem>项目设置</DropdownMenuItem>
           <DropdownMenuItem>成员与权限</DropdownMenuItem>
           <DropdownMenuItem>仓库与集成</DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenModules}>已装模块</DropdownMenuItem>
           <DropdownMenuItem>自动化规则</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>全局</DropdownMenuLabel>

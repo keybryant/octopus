@@ -37,13 +37,14 @@ describe("App (v5 agent homepage)", () => {
     )
   })
 
-  it("modules drawer keeps lazy-load chain alive", async () => {
+  it("modules drawer keeps lazy-load chain alive (entry via settings menu)", async () => {
     mockedFetchModules.mockResolvedValue([
       { id: "quickstart", title: "快捷入口", entry: "/octopus/quickstart/assets/index.js" },
     ])
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole("button", { name: "已装模块" }))
+    await user.click(screen.getByLabelText("设置"))
+    await user.click(screen.getByText("已装模块"))
     expect(await screen.findByRole("button", { name: "快捷入口" })).toBeInTheDocument()
   })
 
