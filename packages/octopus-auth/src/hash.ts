@@ -16,7 +16,7 @@ export const SALT_LEN = 16
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(SALT_LEN)
-  const derived = (await scryptAsync(password, salt, SCRYPT_KEYLEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P })) as Buffer
+  const derived = await scryptAsync(password, salt, SCRYPT_KEYLEN, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P })
   return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("hex")}$${derived.toString("hex")}`
 }
 
@@ -28,8 +28,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   try {
     const salt = Buffer.from(parts[4], "hex")
     const expected = Buffer.from(parts[5], "hex")
-    const derived = (await scryptAsync(password, salt, expected.length, { N, r, p })) as Buffer
-    return derived.length === expected.length && timingSafeEqual(derived, expected)
+    if (salt.length !== SALT_LEN || expected.length !== SCRYPT_KEYLEN) return false
+    const derived = await scryptAsync(password, salt, SCRYPT_KEYLEN, { N, r, p })
+    return timingSafeEqual(derived, expected)
   } catch {
     return false
   }

@@ -24,11 +24,16 @@ export const AuthConfigSchema = z.object({
   sessionTtlDays: z.number().min(1).default(DEFAULT_AUTH_CONFIG.sessionTtlDays),
   trustProxy: z.boolean().default(DEFAULT_AUTH_CONFIG.trustProxy),
   bootstrapAdmin: z.object({
-    username: z.string(),
-    password: z.string(),
-  }),
+    username: z.string().required(),
+    password: z.string().required(),
+  }).default(undefined as never),
 })
 
 export function resolveAuthConfig(partial: Partial<AuthResolvedConfig> = {}): AuthResolvedConfig {
-  return { ...DEFAULT_AUTH_CONFIG, ...partial }
+  const { bootstrapAdmin, ...rest } = partial
+  const resolved: AuthResolvedConfig = { ...DEFAULT_AUTH_CONFIG, ...rest }
+  if (bootstrapAdmin?.username && bootstrapAdmin.password) {
+    resolved.bootstrapAdmin = { username: bootstrapAdmin.username, password: bootstrapAdmin.password }
+  }
+  return resolved
 }
