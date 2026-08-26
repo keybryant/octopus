@@ -16,12 +16,19 @@ export interface TopBarProps {
   currentProjectId: string
   onSwitchProject: (id: string) => void
   onOpenNewProject: () => void
+  onOpenProjectSettings: () => void
 }
 
 const iconBtn =
   "p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface transition-colors duration-fast"
 
-export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewProject }: TopBarProps) {
+export function TopBar({
+  projects,
+  currentProjectId,
+  onSwitchProject,
+  onOpenNewProject,
+  onOpenProjectSettings,
+}: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
 
   return (
@@ -89,7 +96,7 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[240px]">
           <DropdownMenuLabel>本项目</DropdownMenuLabel>
-          <DropdownMenuItem>项目设置</DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenProjectSettings}>项目设置</DropdownMenuItem>
           <DropdownMenuItem>成员与权限</DropdownMenuItem>
           <DropdownMenuItem>仓库与集成</DropdownMenuItem>
           <DropdownMenuItem>自动化规则</DropdownMenuItem>

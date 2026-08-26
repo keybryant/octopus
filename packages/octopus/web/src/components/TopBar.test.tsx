@@ -9,6 +9,7 @@ const props = {
   currentProjectId: "octopus-platform",
   onSwitchProject: vi.fn(),
   onOpenNewProject: vi.fn(),
+  onOpenProjectSettings: vi.fn(),
 }
 
 describe("TopBar", () => {
@@ -35,5 +36,13 @@ describe("TopBar", () => {
     expect(link).toHaveAttribute("href", "/")
     // dsh-web-frontend 无 /marketplace、/settings 路由，旧首页链接为死链，不保留
     expect(screen.queryByRole("link", { name: "插件市场" })).not.toBeInTheDocument()
+  })
+
+  it("opens project settings from the settings menu", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} />)
+    await user.click(screen.getByTitle("设置"))
+    await user.click(screen.getByText("项目设置"))
+    expect(props.onOpenProjectSettings).toHaveBeenCalledOnce()
   })
 })
