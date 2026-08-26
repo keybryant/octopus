@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Dev Workbench</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    
+    :root {
+      --neon-blue: #00d4ff;
+      --neon-purple: #a855f7;
+      --neon-green: #22c55e;
+      --neon-orange: #f97316;
+      --bg-dark: #0a0a0f;
+      --bg-card: #12121a;
+      --bg-surface: #1a1a25;
+      --border-glow: rgba(0, 212, 255, 0.3);
+    }
+    
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    body {
+      background: var(--bg-dark);
+      color: #e0e0e0;
+    }
+    
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    .neon-border {
+      border: 1px solid var(--border-glow);
+      box-shadow: 0 0 15px rgba(0, 212, 255, 0.1), inset 0 0 15px rgba(0, 212, 255, 0.05);
+    }
+    
+    .neon-glow {
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+    }
+    
+    .neon-text {
+      text-shadow: 0 0 10px var(--neon-blue);
+    }
+    
+    .neon-text-purple {
+      text-shadow: 0 0 10px var(--neon-purple);
+    }
+    
+    .gradient-border {
+      background: linear-gradient(135deg, var(--neon-blue), var(--neon-purple));
+      padding: 1px;
+    }
+    
+    .gradient-border > div {
+      background: var(--bg-card);
+    }
+    
+    .ai-pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    .scan-line {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .scan-line::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--neon-blue), transparent);
+      animation: scan 3s linear infinite;
+    }
+    
+    @keyframes scan {
+      0% { transform: translateY(0); }
+      100% { transform: translateY(100%); }
+    }
+    
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: glow 1.5s ease-in-out infinite;
+    }
+    
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 5px currentColor; }
+      50% { box-shadow: 0 0 15px currentColor, 0 0 25px currentColor; }
+    }
+    
+    .sidebar-item {
+      transition: all 0.2s ease;
+    }
+    
+    .sidebar-item:hover {
+      background: rgba(0, 212, 255, 0.1);
+      border-left: 3px solid var(--neon-blue);
+    }
+    
+    .sidebar-item.active {
+      background: rgba(0, 212, 255, 0.15);
+      border-left: 3px solid var(--neon-blue);
+    }
+    
+    .card-hover {
+      transition: all 0.3s ease;
+    }
+    
+    .card-hover:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.2);
+    }
+    
+    .typing-indicator span {
+      animation: typing 1.4s infinite;
+    }
+    
+    .typing-indicator span:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    
+    .typing-indicator span:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
+    }
+    
+    .progress-bar {
+      background: linear-gradient(90deg, var(--neon-blue), var(--neon-purple));
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .progress-bar::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      animation: shimmer 2s infinite;
+    }
+    
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: var(--bg-dark);
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: var(--neon-blue);
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div class="flex h-screen overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-16 bg-[#0d0d14] border-r border-cyan-900/30 flex flex-col items-center py-4">
+      <div class="mb-8">
+        <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center neon-glow">
+          <i class="fas fa-robot text-white"></i>
+        </div>
+      </div>
+      
+      <nav class="flex-1 flex flex-col gap-2">
+        <button class="sidebar-item active w-12 h-12 rounded-lg flex items-center justify-center text-cyan-400" title="工作台">
+          <i class="fas fa-th-large"></i>
+        </button>
+        <button class="sidebar-item w-12 h-12 rounded-lg flex items-center justify-center text-gray-400 hover:text-cyan-400" title="项目管理">
+          <i class="fas fa-folder-open"></i>
+        </button>
+        <button class="sidebar-item w-12 h-12 rounded-lg flex items-center justify-center text-gray-400 hover:text-cyan-400" title="需求管理">
+          <i class="fas fa-clipboard-list"></i>
+        </button>
+        <button class="sidebar-item w-12 h-12 rounded-lg flex items-center justify-center text-gray-400 hover:text-cyan-400" title="任务管理">
+          <i class="fas fa-tasks"></i>
+        </button>
+        <button class="sidebar-item w-12 h-12 rounded-lg flex items-center justify-center text-gray-400 hover:text-cyan-400" title="AI对话">
+          <i class="fas fa-comments"></i>
+        </button>
+      </nav>
+      
+      <div class="flex flex-col gap-2">
+        <button class="sidebar-item w-12 h-12 rounded-lg flex items-center justify-center text-gray-400 hover:text-cyan-400" title="设置">
+          <i class="fas fa-cog"></i>
+        </button>
+        <div class="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-sm">
+          Y
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="h-14 bg-[#0d0d14] border-b border-cyan-900/30 flex items-center justify-between px-6">
+        <div class="flex items-center gap-4">
+          <h1 class="text-lg font-semibold text-white">
+            <span class="text-cyan-400">AI</span> Dev Workbench
+          </h1>
+          <div class="h-6 w-px bg-cyan-900/30"></div>
+          <span class="text-sm text-gray-400 mono">v2.4.1</span>
+        </div>
+        
+        <div class="flex items-center gap-4">
+          <div class="relative">
+            <input type="text" placeholder="搜索..." class="w-64 h-9 bg-[#1a1a25] border border-cyan-900/30 rounded-lg px-4 text-sm text-gray-300 focus:outline-none focus:border-cyan-400 transition-colors">
+            <i class="fas fa-search absolute right-3 top-1/2 -translate-y-1/2 text-gray-500"></i>
+          </div>
+          
+          <button class="relative p-2 text-gray-400 hover:text-cyan-400 transition-colors">
+            <i class="fas fa-bell"></i>
+            <span class="absolute top-1 right-1 w-2 h-2 bg-orange-500 rounded-full"></span>
+          </button>
+          
+          <div class="flex items-center gap-2 px-3 py-1.5 bg-[#1a1a25] rounded-lg border border-cyan-900/30">
+            <div class="status-dot bg-green-500 text-green-500"></div>
+            <span class="text-sm text-gray-300">AI 在线</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- Left Panel - Project Info -->
+        <div class="w-80 bg-[#0d0d14] border-r border-cyan-900/30 flex flex-col">
+          <!-- Project Selector -->
+          <div class="p-4 border-b border-cyan-900/30">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs text-gray-500 uppercase tracking-wider">当前项目</span>
+              <button class="text-cyan-400 hover:text-cyan-300 text-sm">
+                <i class="fas fa-exchange-alt"></i>
+              </button>
+            </div>
+            <div class="flex items-center gap-3 p-3 bg-[#1a1a25] rounded-lg neon-border">
+              <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+                <i class="fas fa-code text-white"></i>
+              </div>
+              <div>
+                <h3 class="font-medium text-white">Octopus Platform</h3>
+                <p class="text-xs text-gray-400">企业级开发平台</p>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Quick Stats -->
+          <div class="p-4 border-b border-cyan-900/30">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs text-gray-500 uppercase tracking-wider">项目概览</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div class="p-3 bg-[#1a1a25] rounded-lg">
+                <div class="text-2xl font-bold text-cyan-400 mono">24</div>
+                <div class="text-xs text-gray-400">需求总数</div>
+              </div>
+              <div class="p-3 bg-[#1a1a25] rounded-lg">
+                <div class="text-2xl font-bold text-green-400 mono">18</div>
+                <div class="text-xs text-gray-400">已完成</div>
+              </div>
+              <div class="p-3 bg-[#1a1a25] rounded-lg">
+                <div class="text-2xl font-bold text-orange-400 mono">4</div>
+                <div class="text-xs text-gray-400">进行中</div>
+              </div>
+              <div class="p-3 bg-[#1a1a25] rounded-lg">
+                <div class="text-2xl font-bold text-purple-400 mono">2</div>
+                <div class="text-xs text-gray-400">待处理</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- AI Assistant Quick -->
+          <div class="flex-1 p-4 flex flex-col">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs text-gray-500 uppercase tracking-wider">AI 助手</span>
+              <div class="flex items-center gap-1">
+                <div class="status-dot bg-green-500 text-green-500"></div>
+                <span class="text-xs text-green-400">就绪</span>
+              </div>
+            </div>
+            
+            <div class="flex-1 bg-[#1a1a25] rounded-lg p-3 border border-cyan-900/30 scan-line">
+              <div class="flex items-start gap-3 mb-3">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center flex-shrink-0">
+                  <i class="fas fa-robot text-white text-sm"></i>
+                </div>
+                <div class="bg-[#0d0d14] rounded-lg p-3 text-sm text-gray-300">
+                  <p class="mb-2">👋 你好！我是你的AI开发助手。</p>
+                  <p>我可以帮你：</p>
+                  <ul class="mt-2 space-y-1 text-cyan-400">
+                    <li>• 分析需求并生成任务</li>
+                    <li>• 代码审查和优化建议</li>
+                    <li>• 自动化测试生成</li>
+                    <li>• 项目进度分析</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+            
+            <div class="mt-3 relative">
+              <input type="text" placeholder="输入指令..." class="w-full h-10 bg-[#1a1a25] border border-cyan-900/30 rounded-lg pl-4 pr-10 text-sm text-gray-300 focus:outline-none focus:border-cyan-400 transition-colors">
+              <button class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded bg-cyan-500 flex items-center justify-center text-white hover:bg-cyan-400 transition-colors">
+                <i class="fas fa-paper-plane text-xs"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Center Panel - Main Content -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+          <!-- Tab Navigation -->
+          <div class="h-12 bg-[#0d0d14] border-b border-cyan-900/30 flex items-center px-4 gap-1">
+            <button class="px-4 py-2 text-sm text-cyan-400 bg-[#1a1a25] rounded-lg border border-cyan-900/30">
+              <i class="fas fa-tachometer-alt mr-2"></i>仪表盘
+            </button>
+            <button class="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#1a1a25] rounded-lg transition-colors">
+              <i class="fas fa-clipboard-list mr-2"></i>需求列表
+            </button>
+            <button class="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#1a1a25] rounded-lg transition-colors">
+              <i class="fas fa-project-diagram mr-2"></i>看板视图
+            </button>
+            <button class="px-4 py-2 text-sm text-gray-400 hover:text-white hover:bg-[#1a1a25] rounded-lg transition-colors">
+              <i class="fas fa-chart-line mr-2"></i>进度分析
+            </button>
+          </div>
+
+          <!-- Dashboard Content -->
+          <div class="flex-1 overflow-auto p-6">
+            <!-- Stats Cards -->
+            <div class="grid grid-cols-4 gap-4 mb-6">
+              <div class="p-4 bg-[#12121a] rounded-xl neon-border card-hover">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                    <i class="fas fa-rocket text-cyan-400"></i>
+                  </div>
+                  <span class="text-xs text-green-400 mono">+12%</span>
+                </div>
+                <div class="text-2xl font-bold text-white mono">87%</div>
+                <div class="text-sm text-gray-400">开发进度</div>
+                <div class="mt-3 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                  <div class="progress-bar h-full" style="width: 87%"></div>
+                </div>
+              </div>
+              
+              <div class="p-4 bg-[#12121a] rounded-xl neon-border card-hover">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                    <i class="fas fa-brain text-purple-400"></i>
+                  </div>
+                  <span class="text-xs text-green-400 mono">+8%</span>
+                </div>
+                <div class="text-2xl font-bold text-white mono">156</div>
+                <div class="text-sm text-gray-400">AI 建议采纳</div>
+              </div>
+              
+              <div class="p-4 bg-[#12121a] rounded-xl neon-border card-hover">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                    <i class="fas fa-check-circle text-green-400"></i>
+                  </div>
+                  <span class="text-xs text-green-400 mono">+23%</span>
+                </div>
+                <div class="text-2xl font-bold text-white mono">42</div>
+                <div class="text-sm text-gray-400">今日完成任务</div>
+              </div>
+              
+              <div class="p-4 bg-[#12121a] rounded-xl neon-border card-hover">
+                <div class="flex items-center justify-between mb-3">
+                  <div class="w-10 h-10 rounded-lg bg-orange-500/20 flex items-center justify-center">
+                    <i class="fas fa-bug text-orange-400"></i>
+                  </div>
+                  <span class="text-xs text-red-400 mono">-5%</span>
+                </div>
+                <div class="text-2xl font-bold text-white mono">3</div>
+                <div class="text-sm text-gray-400">待修复问题</div>
+              </div>
+            </div>
+
+            <!-- Main Grid -->
+            <div class="grid grid-cols-3 gap-6">
+              <!-- Recent Tasks -->
+              <div class="col-span-2 bg-[#12121a] rounded-xl neon-border">
+                <div class="p-4 border-b border-cyan-900/30 flex items-center justify-between">
+                  <h3 class="font-medium text-white flex items-center gap-2">
+                    <i class="fas fa-tasks text-cyan-400"></i>
+                    近期任务
+                  </h3>
+                  <button class="text-sm text-cyan-400 hover:text-cyan-300">查看全部</button>
+                </div>
+                <div class="p-4 space-y-3">
+                  <div class="flex items-center gap-4 p-3 bg-[#1a1a25] rounded-lg hover:bg-[#1f1f2a] transition-colors cursor-pointer">
+                    <div class="w-2 h-2 rounded-full bg-cyan-400"></div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-white font-medium">用户认证模块优化</span>
+                        <span class="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 text-xs rounded">进行中</span>
+                      </div>
+                      <div class="text-sm text-gray-400 mt-1">支持OAuth2.0和微信登录</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm text-gray-400">张三</div>
+                      <div class="text-xs text-gray-500">2h前</div>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-4 p-3 bg-[#1a1a25] rounded-lg hover:bg-[#1f1f2a] transition-colors cursor-pointer">
+                    <div class="w-2 h-2 rounded-full bg-purple-400"></div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-white font-medium">AI对话引擎集成</span>
+                        <span class="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded">AI处理中</span>
+                      </div>
+                      <div class="text-sm text-gray-400 mt-1">集成GPT-4接口，优化响应速度</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm text-gray-400">AI 助手</div>
+                      <div class="text-xs text-gray-500">进行中</div>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-4 p-3 bg-[#1a1a25] rounded-lg hover:bg-[#1f1f2a] transition-colors cursor-pointer">
+                    <div class="w-2 h-2 rounded-full bg-green-400"></div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-white font-medium">数据库性能调优</span>
+                        <span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded">已完成</span>
+                      </div>
+                      <div class="text-sm text-gray-400 mt-1">查询优化，索引重建</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm text-gray-400">李四</div>
+                      <div class="text-xs text-gray-500">1天前</div>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-4 p-3 bg-[#1a1a25] rounded-lg hover:bg-[#1f1f2a] transition-colors cursor-pointer">
+                    <div class="w-2 h-2 rounded-full bg-orange-400"></div>
+                    <div class="flex-1">
+                      <div class="flex items-center gap-2">
+                        <span class="text-white font-medium">前端组件库升级</span>
+                        <span class="px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs rounded">待处理</span>
+                      </div>
+                      <div class="text-sm text-gray-400 mt-1">升级至最新版本，兼容性测试</div>
+                    </div>
+                    <div class="text-right">
+                      <div class="text-sm text-gray-400">王五</div>
+                      <div class="text-xs text-gray-500">待分配</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- AI Activity -->
+              <div class="bg-[#12121a] rounded-xl neon-border">
+                <div class="p-4 border-b border-cyan-900/30 flex items-center justify-between">
+                  <h3 class="font-medium text-white flex items-center gap-2">
+                    <i class="fas fa-robot text-purple-400"></i>
+                    AI 活动
+                  </h3>
+                  <div class="status-dot bg-green-500 text-green-500"></div>
+                </div>
+                <div class="p-4 space-y-3">
+                  <div class="p-3 bg-[#1a1a25] rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                      <div class="w-6 h-6 rounded bg-cyan-500/20 flex items-center justify-center">
+                        <i class="fas fa-code text-cyan-400 text-xs"></i>
+                      </div>
+                      <span class="text-sm text-gray-300">代码审查</span>
+                      <span class="text-xs text-gray-500 ml-auto">3分钟前</span>
+                    </div>
+                    <p class="text-sm text-gray-400">检测到 <span class="text-cyan-400">auth.service.ts</span> 中的潜在安全漏洞</p>
+                  </div>
+                  
+                  <div class="p-3 bg-[#1a1a25] rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                      <div class="w-6 h-6 rounded bg-purple-500/20 flex items-center justify-center">
+                        <i class="fas fa-magic text-purple-400 text-xs"></i>
+                      </div>
+                      <span class="text-sm text-gray-300">代码生成</span>
+                      <span class="text-xs text-gray-500 ml-auto">15分钟前</span>
+                    </div>
+                    <p class="text-sm text-gray-400">已生成 <span class="text-purple-400">单元测试用例</span> 覆盖率提升至92%</p>
+                  </div>
+                  
+                  <div class="p-3 bg-[#1a1a25] rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                      <div class="w-6 h-6 rounded bg-green-500/20 flex items-center justify-center">
+                        <i class="fas fa-chart-bar text-green-400 text-xs"></i>
+                      </div>
+                      <span class="text-sm text-gray-300">进度分析</span>
+                      <span class="text-xs text-gray-500 ml-auto">1小时前</span>
+                    </div>
+                    <p class="text-sm text-gray-400">项目预计 <span class="text-green-400">提前3天</span> 完成里程碑</p>
+                  </div>
+                  
+                  <div class="p-3 bg-[#1a1a25] rounded-lg">
+                    <div class="flex items-center gap-2 mb-2">
+                      <div class="w-6 h-6 rounded bg-orange-500/20 flex items-center justify-center">
+                        <i class="fas fa-lightbulb text-orange-400 text-xs"></i>
+                      </div>
+                      <span class="text-sm text-gray-300">优化建议</span>
+                      <span class="text-xs text-gray-500 ml-auto">2小时前</span>
+                    </div>
+                    <p class="text-sm text-gray-400">建议对 <span class="text-orange-400">API网关</span> 进行缓存优化</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Panel - AI Chat -->
+        <div class="w-96 bg-[#0d0d14] border-l border-cyan-900/30 flex flex-col">
+          <div class="p-4 border-b border-cyan-900/30 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                <i class="fas fa-robot text-white text-sm"></i>
+              </div>
+              <div>
+                <h3 class="font-medium text-white">AI 对话</h3>
+                <p class="text-xs text-gray-400">智能开发助手</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="p-2 text-gray-400 hover:text-cyan-400 transition-colors">
+                <i class="fas fa-minus"></i>
+              </button>
+              <button class="p-2 text-gray-400 hover:text-cyan-400 transition-colors">
+                <i class="fas fa-expand"></i>
+              </button>
+            </div>
+          </div>
+          
+          <div class="flex-1 overflow-auto p-4 space-y-4">
+            <!-- User Message -->
+            <div class="flex justify-end">
+              <div class="max-w-[80%]">
+                <div class="bg-cyan-600 rounded-2xl rounded-tr-sm p-4">
+                  <p class="text-white">帮我分析一下用户认证模块的性能瓶颈，并给出优化建议</p>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 text-right">14:32</div>
+              </div>
+            </div>
+            
+            <!-- AI Response -->
+            <div class="flex justify-start">
+              <div class="max-w-[85%]">
+                <div class="bg-[#1a1a25] rounded-2xl rounded-tl-sm p-4 border border-cyan-900/30">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                      <i class="fas fa-robot text-white text-xs"></i>
+                    </div>
+                    <span class="text-sm font-medium text-cyan-400">AI 助手</span>
+                  </div>
+                  <div class="text-sm text-gray-300 space-y-3">
+                    <p>📊 <strong class="text-white">性能分析结果：</strong></p>
+                    <p>经过分析，我发现了以下性能瓶颈：</p>
+                    <ol class="list-decimal list-inside space-y-2 text-gray-400">
+                      <li><span class="text-orange-400">JWT Token验证</span> 每次请求都进行数据库查询</li>
+                      <li><span class="text-orange-400">Session存储</span> 使用内存存储，不支持集群</li>
+                      <li><span class="text-orange-400">密码哈希</span> 使用默认强度，CPU占用高</li>
+                    </ol>
+                    <p class="mt-3">💡 <strong class="text-white">优化建议：</strong></p>
+                    <div class="bg-[#0d0d14] rounded-lg p-3 mono text-xs">
+                      <p class="text-cyan-400">// 1. 实现Token缓存</p>
+                      <p class="text-gray-400">const cache = new LRUCache({ max: 1000 });</p>
+                      <p class="text-cyan-400 mt-2">// 2. 使用Redis存储Session</p>
+                      <p class="text-gray-400">app.use(session({ store: new RedisStore() }));</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">14:33 · 预计提升40%性能</div>
+              </div>
+            </div>
+            
+            <!-- User Message -->
+            <div class="flex justify-end">
+              <div class="max-w-[80%]">
+                <div class="bg-cyan-600 rounded-2xl rounded-tr-sm p-4">
+                  <p class="text-white">好的，请帮我生成优化后的代码</p>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 text-right">14:35</div>
+              </div>
+            </div>
+            
+            <!-- AI Response with Code -->
+            <div class="flex justify-start">
+              <div class="max-w-[85%]">
+                <div class="bg-[#1a1a25] rounded-2xl rounded-tl-sm p-4 border border-cyan-900/30">
+                  <div class="flex items-center gap-2 mb-3">
+                    <div class="w-6 h-6 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                      <i class="fas fa-robot text-white text-xs"></i>
+                    </div>
+                    <span class="text-sm font-medium text-cyan-400">AI 助手</span>
+                  </div>
+                  <div class="text-sm text-gray-300">
+                    <p class="mb-3">✅ 已生成优化后的认证模块代码：</p>
+                    <div class="bg-[#0d0d14] rounded-lg p-3 mono text-xs overflow-x-auto">
+                      <pre class="text-gray-300"><span class="text-purple-400">import</span> { Redis } <span class="text-purple-400">from</span> <span class="text-green-400">'ioredis'</span>;
+<span class="text-purple-400">import</span> { LRUCache } <span class="text-purple-400">from</span> <span class="text-green-400">'lru-cache'</span>;
+
+<span class="text-cyan-400">const</span> tokenCache = <span class="text-purple-400">new</span> LRUCache({
+  <span class="text-orange-400">max</span>: <span class="text-cyan-400">10000</span>,
+  <span class="text-orange-400">ttl</span>: <span class="text-cyan-400">1000</span> * <span class="text-cyan-400">60</span> * <span class="text-cyan-400">5</span>
+});
+
+<span class="text-cyan-400">const</span> redis = <span class="text-purple-400">new</span> Redis();</pre>
+                    </div>
+                    <div class="mt-3 flex gap-2">
+                      <button class="px-3 py-1.5 bg-cyan-500/20 text-cyan-400 text-xs rounded-lg hover:bg-cyan-500/30 transition-colors">
+                        <i class="fas fa-copy mr-1"></i>复制代码
+                      </button>
+                      <button class="px-3 py-1.5 bg-purple-500/20 text-purple-400 text-xs rounded-lg hover:bg-purple-500/30 transition-colors">
+                        <i class="fas fa-file-import mr-1"></i>导入项目
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-500 mt-1">14:36</div>
+              </div>
+            </div>
+            
+            <!-- Typing Indicator -->
+            <div class="flex justify-start">
+              <div class="bg-[#1a1a25] rounded-2xl rounded-tl-sm px-4 py-3 border border-cyan-900/30">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 rounded bg-gradient-to-br from-cyan-400 to-purple-500 flex items-center justify-center">
+                    <i class="fas fa-robot text-white text-xs"></i>
+                  </div>
+                  <div class="typing-indicator flex gap-1">
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Input Area -->
+          <div class="p-4 border-t border-cyan-900/30">
+            <div class="flex items-end gap-3">
+              <div class="flex-1 relative">
+                <textarea 
+                  rows="1" 
+                  placeholder="输入消息... (Shift+Enter 换行)" 
+                  class="w-full bg-[#1a1a25] border border-cyan-900/30 rounded-xl px-4 py-3 text-sm text-gray-300 focus:outline-none focus:border-cyan-400 transition-colors resize-none"
+                ></textarea>
+                <div class="absolute right-2 bottom-2 flex items-center gap-1">
+                  <button class="p-1.5 text-gray-400 hover:text-cyan-400 transition-colors">
+                    <i class="fas fa-paperclip"></i>
+                  </button>
+                  <button class="p-1.5 text-gray-400 hover:text-cyan-400 transition-colors">
+                    <i class="fas fa-microphone"></i>
+                  </button>
+                </div>
+              </div>
+              <button class="p-3 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-xl text-white hover:opacity-90 transition-opacity neon-glow">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+            <div class="mt-2 flex items-center justify-between text-xs text-gray-500">
+              <div class="flex items-center gap-3">
+                <button class="hover:text-cyan-400 transition-colors">
+                  <i class="fas fa-code mr-1"></i>代码模式
+                </button>
+                <button class="hover:text-cyan-400 transition-colors">
+                  <i class="fas fa-image mr-1"></i>图片分析
+                </button>
+              </div>
+              <span>AI 模型: GPT-4</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

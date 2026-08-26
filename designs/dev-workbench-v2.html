@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Octopus AI Workbench</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    
+    :root {
+      --neon-cyan: #00f5ff;
+      --neon-purple: #a855f7;
+      --neon-pink: #ec4899;
+      --neon-blue: #3b82f6;
+      --bg-deep: #050510;
+      --bg-card: rgba(15, 15, 30, 0.8);
+      --bg-glass: rgba(255, 255, 255, 0.03);
+      --border-glow: rgba(0, 245, 255, 0.2);
+    }
+    
+    * {
+      font-family: 'Inter', sans-serif;
+    }
+    
+    .font-display {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    
+    body {
+      background: var(--bg-deep);
+      background-image: 
+        radial-gradient(ellipse at 20% 50%, rgba(0, 245, 255, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(168, 85, 247, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(236, 72, 153, 0.05) 0%, transparent 50%);
+      min-height: 100vh;
+      color: #e0e0e0;
+    }
+    
+    /* Grid background */
+    .grid-bg {
+      background-image: 
+        linear-gradient(rgba(0, 245, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 245, 255, 0.03) 1px, transparent 1px);
+      background-size: 50px 50px;
+    }
+    
+    /* Glass morphism */
+    .glass {
+      background: var(--bg-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--border-glow);
+    }
+    
+    .glass-card {
+      background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.02) 100%);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    
+    /* Neon effects */
+    .neon-glow-cyan {
+      box-shadow: 0 0 20px rgba(0, 245, 255, 0.3), 0 0 40px rgba(0, 245, 255, 0.1);
+    }
+    
+    .neon-glow-purple {
+      box-shadow: 0 0 20px rgba(168, 85, 247, 0.3), 0 0 40px rgba(168, 85, 247, 0.1);
+    }
+    
+    .neon-text {
+      text-shadow: 0 0 20px currentColor;
+    }
+    
+    /* Octopus tentacle animation */
+    .tentacle {
+      position: absolute;
+      width: 3px;
+      height: 60px;
+      background: linear-gradient(to bottom, var(--neon-cyan), transparent);
+      border-radius: 0 0 10px 10px;
+      transform-origin: top center;
+      animation: tentacle-wave 3s ease-in-out infinite;
+    }
+    
+    .tentacle:nth-child(2) { animation-delay: 0.5s; height: 50px; }
+    .tentacle:nth-child(3) { animation-delay: 1s; height: 45px; }
+    .tentacle:nth-child(4) { animation-delay: 1.5s; height: 55px; }
+    .tentacle:nth-child(5) { animation-delay: 2s; height: 40px; }
+    .tentacle:nth-child(6) { animation-delay: 2.5s; height: 50px; }
+    .tentacle:nth-child(7) { animation-delay: 0.3s; height: 45px; }
+    .tentacle:nth-child(8) { animation-delay: 1.8s; height: 55px; }
+    
+    @keyframes tentacle-wave {
+      0%, 100% { transform: rotate(-15deg); }
+      50% { transform: rotate(15deg); }
+    }
+    
+    /* Floating animation */
+    .float {
+      animation: float 6s ease-in-out infinite;
+    }
+    
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+    
+    /* Pulse ring */
+    .pulse-ring {
+      animation: pulse-ring 2s ease-out infinite;
+    }
+    
+    @keyframes pulse-ring {
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+    
+    /* Data flow lines */
+    .data-flow {
+      position: relative;
+      overflow: hidden;
+    }
+    
+    .data-flow::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--neon-cyan), transparent);
+      animation: data-flow 3s linear infinite;
+    }
+    
+    @keyframes data-flow {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }
+    
+    /* Orb background */
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(60px);
+      opacity: 0.4;
+      animation: orb-float 8s ease-in-out infinite;
+    }
+    
+    @keyframes orb-float {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(30px, -30px) scale(1.1); }
+      66% { transform: translate(-20px, 20px) scale(0.9); }
+    }
+    
+    /* Card hover */
+    .card-lift {
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    
+    .card-lift:hover {
+      transform: translateY(-8px) scale(1.02);
+      box-shadow: 0 20px 40px rgba(0, 245, 255, 0.15);
+    }
+    
+    /* Status indicator */
+    .status-pulse {
+      animation: status-pulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes status-pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 currentColor; }
+      50% { opacity: 0.8; box-shadow: 0 0 0 8px transparent; }
+    }
+    
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0, 245, 255, 0.3); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(0, 245, 255, 0.5); }
+    
+    /* Menu item */
+    .menu-item {
+      position: relative;
+      transition: all 0.3s ease;
+    }
+    
+    .menu-item::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 0;
+      background: var(--neon-cyan);
+      border-radius: 0 3px 3px 0;
+      transition: height 0.3s ease;
+    }
+    
+    .menu-item:hover::before,
+    .menu-item.active::before {
+      height: 60%;
+    }
+    
+    .menu-item:hover,
+    .menu-item.active {
+      background: rgba(0, 245, 255, 0.08);
+    }
+    
+    /* Typing animation */
+    .typing-dot {
+      animation: typing 1.4s infinite;
+    }
+    
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    
+    @keyframes typing {
+      0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+      30% { transform: translateY(-8px); opacity: 1; }
+    }
+    
+    /* Hexagon pattern */
+    .hex-pattern {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300f5ff' fill-opacity='0.03'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    }
+    
+    .chat-input:focus-within {
+      border-color: var(--neon-cyan);
+      box-shadow: 0 0 20px rgba(0, 245, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="grid-bg hex-pattern overflow-hidden">
+  <!-- Background Orbs -->
+  <div class="orb w-96 h-96 bg-cyan-500/20 top-20 left-20" style="animation-delay: 0s;"></div>
+  <div class="orb w-80 h-80 bg-purple-500/20 bottom-20 right-20" style="animation-delay: 2s;"></div>
+  <div class="orb w-64 h-64 bg-pink-500/10 top-1/2 left-1/2" style="animation-delay: 4s;"></div>
+  
+  <div class="relative z-10 h-screen flex">
+    
+    <!-- Minimal Sidebar -->
+    <aside class="w-20 glass flex flex-col items-center py-8 mx-4 my-4 rounded-3xl">
+      <!-- Octopus Logo -->
+      <div class="relative w-14 h-14 mb-10 float">
+        <div class="absolute inset-0 bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 rounded-2xl rotate-45 neon-glow-cyan"></div>
+        <div class="absolute inset-1 bg-[#050510] rounded-xl rotate-45 flex items-center justify-center">
+          <svg class="w-7 h-7 -rotate-45" viewBox="0 0 24 24" fill="none">
+            <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z" 
+                  fill="url(#octopus-gradient)" stroke="rgba(0,245,255,0.5)" stroke-width="0.5"/>
+            <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+            <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+            <circle cx="9" cy="8" r="0.7" fill="#00f5ff"/>
+            <circle cx="15" cy="8" r="0.7" fill="#00f5ff"/>
+            <!-- Tentacles -->
+            <path d="M7 16c-1 1-2 2-3 4" stroke="url(#tentacle-gradient)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <path d="M9 17c-0.5 1.5-1 3-1.5 5" stroke="url(#tentacle-gradient)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <path d="M12 17v5" stroke="url(#tentacle-gradient)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <path d="M15 17c0.5 1.5 1 3 1.5 5" stroke="url(#tentacle-gradient)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <path d="M17 16c1 1 2 2 3 4" stroke="url(#tentacle-gradient)" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+            <defs>
+              <linearGradient id="octopus-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" stop-color="#00f5ff"/>
+                <stop offset="50%" stop-color="#a855f7"/>
+                <stop offset="100%" stop-color="#ec4899"/>
+              </linearGradient>
+              <linearGradient id="tentacle-gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                <stop offset="0%" stop-color="#a855f7"/>
+                <stop offset="100%" stop-color="#00f5ff" stop-opacity="0.3"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+      </div>
+      
+      <!-- Nav Items -->
+      <nav class="flex-1 flex flex-col gap-2 w-full px-2">
+        <button class="menu-item active w-full h-12 rounded-xl flex items-center justify-center text-cyan-400" title="工作台">
+          <i class="fas fa-th-large text-lg"></i>
+        </button>
+        <button class="menu-item w-full h-12 rounded-xl flex items-center justify-center text-gray-500 hover:text-cyan-400" title="项目">
+          <i class="fas fa-rocket text-lg"></i>
+        </button>
+        <button class="menu-item w-full h-12 rounded-xl flex items-center justify-center text-gray-500 hover:text-cyan-400" title="需求">
+          <i class="fas fa-layer-group text-lg"></i>
+        </button>
+        <button class="menu-item w-full h-12 rounded-xl flex items-center justify-center text-gray-500 hover:text-cyan-400" title="任务">
+          <i class="fas fa-clipboard-check text-lg"></i>
+        </button>
+        <button class="menu-item w-full h-12 rounded-xl flex items-center justify-center text-gray-500 hover:text-purple-400" title="AI">
+          <i class="fas fa-brain text-lg"></i>
+        </button>
+      </nav>
+      
+      <!-- Bottom -->
+      <div class="flex flex-col gap-3 items-center">
+        <button class="w-10 h-10 rounded-xl glass-card flex items-center justify-center text-gray-500 hover:text-cyan-400 transition-colors">
+          <i class="fas fa-cog"></i>
+        </button>
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-medium cursor-pointer hover:scale-110 transition-transform">
+          Y
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="flex-1 flex flex-col my-4 mr-4 gap-4">
+      
+      <!-- Top Bar -->
+      <header class="glass rounded-2xl px-8 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-3">
+            <h1 class="font-display text-2xl font-bold">
+              <span class="bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Octopus</span>
+            </h1>
+            <span class="text-gray-600">|</span>
+            <span class="text-gray-400 text-sm">AI 开发工作台</span>
+          </div>
+          
+          <div class="h-8 w-px bg-gradient-to-b from-transparent via-cyan-500/30 to-transparent"></div>
+          
+          <!-- Project Selector -->
+          <button class="flex items-center gap-3 px-4 py-2 glass-card rounded-xl hover:border-cyan-500/50 transition-all group">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
+              <i class="fas fa-cube text-white text-sm"></i>
+            </div>
+            <div class="text-left">
+              <div class="text-sm text-white group-hover:text-cyan-400 transition-colors">Octopus Platform</div>
+              <div class="text-xs text-gray-500">企业级开发平台</div>
+            </div>
+            <i class="fas fa-chevron-down text-gray-600 text-xs ml-2"></i>
+          </button>
+        </div>
+        
+        <div class="flex items-center gap-4">
+          <!-- Search -->
+          <div class="relative">
+            <input type="text" placeholder="搜索..." 
+                   class="w-64 h-10 bg-white/5 border border-white/10 rounded-xl px-4 pl-10 text-sm text-gray-300 focus:outline-none focus:border-cyan-500/50 focus:bg-white/8 transition-all">
+            <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-600"></i>
+            <kbd class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-600 bg-white/5 px-1.5 py-0.5 rounded">⌘K</kbd>
+          </div>
+          
+          <!-- Notifications -->
+          <button class="relative p-2.5 glass-card rounded-xl text-gray-400 hover:text-cyan-400 transition-colors">
+            <i class="fas fa-bell"></i>
+            <span class="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full"></span>
+          </button>
+          
+          <!-- AI Status -->
+          <div class="flex items-center gap-2 px-4 py-2 glass-card rounded-xl">
+            <div class="relative">
+              <div class="w-2.5 h-2.5 bg-green-400 rounded-full status-pulse text-green-400"></div>
+              <div class="absolute inset-0 w-2.5 h-2.5 bg-green-400 rounded-full pulse-ring text-green-400"></div>
+            </div>
+            <span class="text-sm text-gray-300">AI 就绪</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Area -->
+      <div class="flex-1 flex gap-4 overflow-hidden">
+        
+        <!-- Left Panel - Quick Access -->
+        <aside class="w-72 flex flex-col gap-4">
+          
+          <!-- AI Assistant Card -->
+          <div class="glass rounded-2xl p-6 card-lift">
+            <div class="flex items-center gap-4 mb-6">
+              <div class="relative">
+                <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex items-center justify-center neon-glow-cyan">
+                  <svg class="w-8 h-8" viewBox="0 0 24 24" fill="white">
+                    <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z"/>
+                    <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+                    <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+                  </svg>
+                </div>
+                <div class="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-[#050510]"></div>
+              </div>
+              <div>
+                <h3 class="font-display font-semibold text-white">Octo AI</h3>
+                <p class="text-sm text-gray-400">智能开发助手</p>
+              </div>
+            </div>
+            
+            <div class="space-y-3">
+              <button class="w-full p-3 glass-card rounded-xl flex items-center gap-3 hover:border-cyan-500/50 transition-all group">
+                <div class="w-10 h-10 rounded-lg bg-cyan-500/20 flex items-center justify-center group-hover:bg-cyan-500/30 transition-colors">
+                  <i class="fas fa-wand-magic-sparkles text-cyan-400"></i>
+                </div>
+                <div class="text-left">
+                  <div class="text-sm text-white">代码生成</div>
+                  <div class="text-xs text-gray-500">智能生成高质量代码</div>
+                </div>
+              </button>
+              
+              <button class="w-full p-3 glass-card rounded-xl flex items-center gap-3 hover:border-purple-500/50 transition-all group">
+                <div class="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center group-hover:bg-purple-500/30 transition-colors">
+                  <i class="fas fa-magnifying-glass-chart text-purple-400"></i>
+                </div>
+                <div class="text-left">
+                  <div class="text-sm text-white">代码审查</div>
+                  <div class="text-xs text-gray-500">自动检测问题和优化</div>
+                </div>
+              </button>
+              
+              <button class="w-full p-3 glass-card rounded-xl flex items-center gap-3 hover:border-pink-500/50 transition-all group">
+                <div class="w-10 h-10 rounded-lg bg-pink-500/20 flex items-center justify-center group-hover:bg-pink-500/30 transition-colors">
+                  <i class="fas fa-chart-line text-pink-400"></i>
+                </div>
+                <div class="text-left">
+                  <div class="text-sm text-white">进度分析</div>
+                  <div class="text-xs text-gray-500">实时项目数据分析</div>
+                </div>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Stats Overview -->
+          <div class="glass rounded-2xl p-6 flex-1">
+            <h3 class="font-display font-semibold text-white mb-4 flex items-center gap-2">
+              <i class="fas fa-chart-pie text-cyan-400"></i>
+              项目概览
+            </h3>
+            
+            <div class="space-y-4">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm text-gray-400">整体进度</span>
+                  <span class="text-sm font-medium text-cyan-400 mono">78%</span>
+                </div>
+                <div class="h-2 bg-white/5 rounded-full overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-cyan-400 to-purple-500 rounded-full" style="width: 78%"></div>
+                </div>
+              </div>
+              
+              <div class="grid grid-cols-2 gap-3">
+                <div class="p-3 glass-card rounded-xl">
+                  <div class="text-2xl font-bold text-cyan-400 mono">24</div>
+                  <div class="text-xs text-gray-500">需求总数</div>
+                </div>
+                <div class="p-3 glass-card rounded-xl">
+                  <div class="text-2xl font-bold text-green-400 mono">18</div>
+                  <div class="text-xs text-gray-500">已完成</div>
+                </div>
+                <div class="p-3 glass-card rounded-xl">
+                  <div class="text-2xl font-bold text-purple-400 mono">4</div>
+                  <div class="text-xs text-gray-500">进行中</div>
+                </div>
+                <div class="p-3 glass-card rounded-xl">
+                  <div class="text-2xl font-bold text-orange-400 mono">2</div>
+                  <div class="text-xs text-gray-500">待处理</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        <!-- Center Panel - Main Content -->
+        <main class="flex-1 glass rounded-2xl flex flex-col overflow-hidden">
+          <!-- Tabs -->
+          <div class="px-6 py-4 border-b border-white/5 flex items-center gap-2">
+            <button class="px-5 py-2.5 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-white rounded-xl text-sm font-medium border border-cyan-500/30">
+              <i class="fas fa-home mr-2"></i>仪表盘
+            </button>
+            <button class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl text-sm transition-all">
+              <i class="fas fa-list-ul mr-2"></i>需求列表
+            </button>
+            <button class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl text-sm transition-all">
+              <i class="fas fa-columns mr-2"></i>看板视图
+            </button>
+            <button class="px-5 py-2.5 text-gray-400 hover:text-white hover:bg-white/5 rounded-xl text-sm transition-all">
+              <i class="fas fa-chart-gantt mr-2"></i>甘特图
+            </button>
+          </div>
+          
+          <!-- Dashboard Content -->
+          <div class="flex-1 overflow-auto p-6">
+            <!-- Welcome Section -->
+            <div class="mb-8">
+              <h2 class="font-display text-2xl font-bold text-white mb-2">
+                早上好，开发者 👋
+              </h2>
+              <p class="text-gray-400">今天有 <span class="text-cyan-400">4个任务</span> 等待处理，<span class="text-purple-400">AI已准备好</span>为你提供帮助</p>
+            </div>
+            
+            <!-- Quick Actions -->
+            <div class="grid grid-cols-4 gap-4 mb-8">
+              <div class="p-5 glass-card rounded-2xl card-lift cursor-pointer group">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500/20 to-cyan-500/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="fas fa-plus text-cyan-400 text-xl"></i>
+                </div>
+                <h4 class="font-medium text-white mb-1">创建需求</h4>
+                <p class="text-xs text-gray-500">新建产品需求文档</p>
+              </div>
+              
+              <div class="p-5 glass-card rounded-2xl card-lift cursor-pointer group">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-500/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="fas fa-code-branch text-purple-400 text-xl"></i>
+                </div>
+                <h4 class="font-medium text-white mb-1">代码审查</h4>
+                <p class="text-xs text-gray-500">AI智能代码审查</p>
+              </div>
+              
+              <div class="p-5 glass-card rounded-2xl card-lift cursor-pointer group">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-green-500/20 to-green-500/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="fas fa-vial text-green-400 text-xl"></i>
+                </div>
+                <h4 class="font-medium text-white mb-1">运行测试</h4>
+                <p class="text-xs text-gray-500">自动化测试套件</p>
+              </div>
+              
+              <div class="p-5 glass-card rounded-2xl card-lift cursor-pointer group">
+                <div class="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-orange-500/5 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                  <i class="fas fa-rocket text-orange-400 text-xl"></i>
+                </div>
+                <h4 class="font-medium text-white mb-1">部署上线</h4>
+                <p class="text-xs text-gray-500">一键部署到生产</p>
+              </div>
+            </div>
+            
+            <!-- Tasks & AI Insights -->
+            <div class="grid grid-cols-5 gap-6">
+              <!-- Tasks -->
+              <div class="col-span-3 glass-card rounded-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+                  <h3 class="font-display font-semibold text-white flex items-center gap-2">
+                    <i class="fas fa-tasks text-cyan-400"></i>
+                    近期任务
+                  </h3>
+                  <button class="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">查看全部 →</button>
+                </div>
+                
+                <div class="p-4 space-y-3">
+                  <div class="p-4 glass-card rounded-xl hover:border-cyan-500/30 transition-all cursor-pointer group">
+                    <div class="flex items-start gap-4">
+                      <div class="mt-1">
+                        <div class="w-5 h-5 rounded border-2 border-cyan-500 flex items-center justify-center">
+                          <i class="fas fa-check text-cyan-400 text-xs opacity-0 group-hover:opacity-100 transition-opacity"></i>
+                        </div>
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="font-medium text-white group-hover:text-cyan-400 transition-colors">用户认证模块优化</span>
+                          <span class="px-2 py-0.5 bg-cyan-500/20 text-cyan-400 text-xs rounded-full">进行中</span>
+                        </div>
+                        <p class="text-sm text-gray-400">支持OAuth2.0和微信登录集成</p>
+                        <div class="flex items-center gap-4 mt-3">
+                          <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-blue-600"></div>
+                            <span class="text-xs text-gray-500">张三</span>
+                          </div>
+                          <span class="text-xs text-gray-600">|</span>
+                          <span class="text-xs text-gray-500"><i class="far fa-clock mr-1"></i>2小时前</span>
+                        </div>
+                      </div>
+                      <div class="flex items-center gap-1">
+                        <span class="px-2 py-1 bg-white/5 rounded text-xs text-gray-400">P0</span>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="p-4 glass-card rounded-xl hover:border-purple-500/30 transition-all cursor-pointer group">
+                    <div class="flex items-start gap-4">
+                      <div class="mt-1">
+                        <div class="w-5 h-5 rounded border-2 border-purple-500 flex items-center justify-center">
+                          <i class="fas fa-robot text-purple-400 text-xs"></i>
+                        </div>
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="font-medium text-white group-hover:text-purple-400 transition-colors">AI对话引擎集成</span>
+                          <span class="px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">AI处理中</span>
+                        </div>
+                        <p class="text-sm text-gray-400">集成GPT-4接口，优化响应速度</p>
+                        <div class="flex items-center gap-4 mt-3">
+                          <div class="flex items-center gap-2">
+                            <div class="w-6 h-6 rounded-full bg-gradient-to-br from-purple-400 to-pink-600 flex items-center justify-center">
+                              <i class="fas fa-robot text-white text-xs"></i>
+                            </div>
+                            <span class="text-xs text-purple-400">Octo AI</span>
+                          </div>
+                          <span class="text-xs text-gray-600">|</span>
+                          <span class="text-xs text-purple-400"><i class="fas fa-spinner fa-spin mr-1"></i>处理中...</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div class="p-4 glass-card rounded-xl hover:border-green-500/30 transition-all cursor-pointer group">
+                    <div class="flex items-start gap-4">
+                      <div class="mt-1">
+                        <div class="w-5 h-5 rounded border-2 border-green-500 flex items-center justify-center bg-green-500/20">
+                          <i class="fas fa-check text-green-400 text-xs"></i>
+                        </div>
+                      </div>
+                      <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                          <span class="font-medium text-white group-hover:text-green-400 transition-colors line-through text-gray-400">数据库性能调优</span>
+                          <span class="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full">已完成</span>
+                        </div>
+                        <p class="text-sm text-gray-500">查询优化，索引重建</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- AI Insights -->
+              <div class="col-span-2 glass-card rounded-2xl overflow-hidden">
+                <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+                  <h3 class="font-display font-semibold text-white flex items-center gap-2">
+                    <i class="fas fa-lightbulb text-yellow-400"></i>
+                    AI 洞察
+                  </h3>
+                  <div class="flex items-center gap-1">
+                    <div class="w-2 h-2 bg-green-400 rounded-full status-pulse text-green-400"></div>
+                    <span class="text-xs text-gray-500">实时更新</span>
+                  </div>
+                </div>
+                
+                <div class="p-4 space-y-3">
+                  <div class="p-4 bg-gradient-to-r from-cyan-500/10 to-transparent rounded-xl border border-cyan-500/20">
+                    <div class="flex items-center gap-2 mb-2">
+                      <i class="fas fa-shield-halved text-cyan-400"></i>
+                      <span class="text-sm font-medium text-white">安全提醒</span>
+                    </div>
+                    <p class="text-sm text-gray-300">检测到 <span class="text-cyan-400">auth.service.ts</span> 中存在潜在的XSS漏洞</p>
+                    <button class="mt-3 text-xs text-cyan-400 hover:text-cyan-300">查看修复方案 →</button>
+                  </div>
+                  
+                  <div class="p-4 bg-gradient-to-r from-purple-500/10 to-transparent rounded-xl border border-purple-500/20">
+                    <div class="flex items-center gap-2 mb-2">
+                      <i class="fas fa-chart-line text-purple-400"></i>
+                      <span class="text-sm font-medium text-white">进度预测</span>
+                    </div>
+                    <p class="text-sm text-gray-300">按当前速度，预计 <span class="text-green-400">提前3天</span> 完成里程碑</p>
+                    <button class="mt-3 text-xs text-purple-400 hover:text-purple-300">查看详细分析 →</button>
+                  </div>
+                  
+                  <div class="p-4 bg-gradient-to-r from-green-500/10 to-transparent rounded-xl border border-green-500/20">
+                    <div class="flex items-center gap-2 mb-2">
+                      <i class="fas fa-wand-magic-sparkles text-green-400"></i>
+                      <span class="text-sm font-medium text-white">优化建议</span>
+                    </div>
+                    <p class="text-sm text-gray-300">API响应时间可优化 <span class="text-green-400">40%</span></p>
+                    <button class="mt-3 text-xs text-green-400 hover:text-green-300">应用优化 →</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+        
+        <!-- Right Panel - AI Chat -->
+        <aside class="w-96 glass rounded-2xl flex flex-col overflow-hidden">
+          <!-- Chat Header -->
+          <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="relative">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex items-center justify-center">
+                  <svg class="w-6 h-6" viewBox="0 0 24 24" fill="white">
+                    <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z"/>
+                    <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+                    <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+                  </svg>
+                </div>
+                <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-[#050510]"></div>
+              </div>
+              <div>
+                <h3 class="font-display font-semibold text-white">Octo AI</h3>
+                <p class="text-xs text-green-400">在线</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2">
+              <button class="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                <i class="fas fa-expand"></i>
+              </button>
+              <button class="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition-all">
+                <i class="fas fa-ellipsis-v"></i>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Chat Messages -->
+          <div class="flex-1 overflow-auto p-6 space-y-6">
+            <!-- Welcome Message -->
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex-shrink-0 flex items-center justify-center">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z"/>
+                  <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+                  <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <div class="glass-card rounded-2xl rounded-tl-sm p-4">
+                  <p class="text-sm text-gray-300 mb-3">你好！我是 <span class="text-cyan-400 font-medium">Octo AI</span>，你的智能开发助手 🐙</p>
+                  <p class="text-sm text-gray-400">我可以帮你：</p>
+                  <ul class="mt-2 space-y-1.5 text-sm text-gray-400">
+                    <li class="flex items-center gap-2"><span class="text-cyan-400">→</span> 分析需求并生成任务</li>
+                    <li class="flex items-center gap-2"><span class="text-purple-400">→</span> 代码审查和优化建议</li>
+                    <li class="flex items-center gap-2"><span class="text-pink-400">→</span> 自动生成测试用例</li>
+                    <li class="flex items-center gap-2"><span class="text-green-400">→</span> 项目进度分析和预测</li>
+                  </ul>
+                </div>
+                <div class="text-xs text-gray-600 mt-2">刚刚</div>
+              </div>
+            </div>
+            
+            <!-- User Message -->
+            <div class="flex gap-3 justify-end">
+              <div class="flex-1 max-w-[85%]">
+                <div class="bg-gradient-to-r from-cyan-500 to-blue-500 rounded-2xl rounded-tr-sm p-4">
+                  <p class="text-sm text-white">帮我分析一下用户认证模块的性能瓶颈</p>
+                </div>
+                <div class="text-xs text-gray-600 mt-2 text-right">14:32</div>
+              </div>
+            </div>
+            
+            <!-- AI Response -->
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex-shrink-0 flex items-center justify-center">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z"/>
+                  <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+                  <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+                </svg>
+              </div>
+              <div class="flex-1">
+                <div class="glass-card rounded-2xl rounded-tl-sm p-4">
+                  <div class="flex items-center gap-2 mb-3">
+                    <span class="text-sm font-medium text-cyan-400">Octo AI</span>
+                    <span class="text-xs text-gray-600">分析完成</span>
+                  </div>
+                  <div class="text-sm text-gray-300 space-y-3">
+                    <p>📊 <strong class="text-white">性能分析结果：</strong></p>
+                    <div class="glass rounded-lg p-3 space-y-2">
+                      <div class="flex items-center justify-between">
+                        <span class="text-gray-400">JWT验证耗时</span>
+                        <span class="text-orange-400 mono">245ms</span>
+                      </div>
+                      <div class="flex items-center justify-between">
+                        <span class="text-gray-400">数据库查询</span>
+                        <span class="text-orange-400 mono">180ms</span>
+                      </div>
+                      <div class="flex items-center justify-between">
+                        <span class="text-gray-400">密码哈希</span>
+                        <span class="text-green-400 mono">12ms</span>
+                      </div>
+                    </div>
+                    <p class="text-xs text-gray-500">💡 建议实现Token缓存，预计提升<span class="text-green-400">40%</span>性能</p>
+                  </div>
+                </div>
+                <div class="text-xs text-gray-600 mt-2">14:33</div>
+              </div>
+            </div>
+            
+            <!-- Typing Indicator -->
+            <div class="flex gap-3">
+              <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-purple-500 to-pink-500 flex-shrink-0 flex items-center justify-center">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="white">
+                  <path d="M12 2C8 2 5 5 5 8c0 2 1 4 2 5v3c0 2 2 4 5 4s5-2 5-4v-3c1-1 2-3 2-5 0-3-3-6-7-6z"/>
+                  <circle cx="9" cy="8" r="1.5" fill="#050510"/>
+                  <circle cx="15" cy="8" r="1.5" fill="#050510"/>
+                </svg>
+              </div>
+              <div class="glass-card rounded-2xl rounded-tl-sm px-5 py-3">
+                <div class="flex items-center gap-2">
+                  <div class="typing-dot w-2 h-2 bg-cyan-400 rounded-full"></div>
+                  <div class="typing-dot w-2 h-2 bg-purple-400 rounded-full"></div>
+                  <div class="typing-dot w-2 h-2 bg-pink-400 rounded-full"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Chat Input -->
+          <div class="p-4 border-t border-white/5">
+            <div class="chat-input glass rounded-xl p-2 flex items-end gap-2 transition-all">
+              <button class="p-2 text-gray-500 hover:text-cyan-400 transition-colors">
+                <i class="fas fa-plus"></i>
+              </button>
+              <textarea 
+                rows="1" 
+                placeholder="输入消息... (Shift+Enter 换行)" 
+                class="flex-1 bg-transparent px-2 py-2 text-sm text-gray-300 focus:outline-none resize-none placeholder-gray-600"
+              ></textarea>
+              <button class="p-2 text-gray-500 hover:text-cyan-400 transition-colors">
+                <i class="fas fa-microphone"></i>
+              </button>
+              <button class="p-2.5 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-lg text-white hover:opacity-90 transition-opacity">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+            <div class="flex items-center justify-between mt-2 px-2">
+              <div class="flex items-center gap-3 text-xs text-gray-600">
+                <button class="hover:text-cyan-400 transition-colors"><i class="fas fa-code mr-1"></i>代码</button>
+                <button class="hover:text-cyan-400 transition-colors"><i class="fas fa-image mr-1"></i>图片</button>
+                <button class="hover:text-cyan-400 transition-colors"><i class="fas fa-file mr-1"></i>文件</button>
+              </div>
+              <span class="text-xs text-gray-600">GPT-4</span>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+  
+  <script>
+    // Auto-resize textarea
+    document.querySelectorAll('textarea').forEach(textarea => {
+      textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+      });
+    });
+  </script>
+</body>
+</html>

@@ -2,6 +2,7 @@ node_modules/
 /packages/*/lib/
 web-dist/
 **/web/dist/
+.opencode/
 *.tsbuildinfo
 *.log
 .superpowers/
