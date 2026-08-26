@@ -5,15 +5,15 @@ import { currentProject } from "../lib/datasource"
 import { ProjectStrip } from "./ProjectStrip"
 
 describe("ProjectStrip", () => {
-  it("renders all metrics inline", () => {
+  it("renders metrics inline without progress or member stack", () => {
     render(<ProjectStrip summary={currentProject()} onOpenKanban={() => {}} onOpenRequirements={() => {}} />)
-    expect(screen.getByText("78%")).toBeInTheDocument()
     expect(screen.getByText("28")).toBeInTheDocument()
     expect(screen.getByText("/40")).toBeInTheDocument()
     expect(screen.getByText("24")).toBeInTheDocument()
     expect(screen.getByText("10-31")).toBeInTheDocument()
-    // 成员 8 人，显示前 3 个 + 溢出计数
-    expect(screen.getByText("+5")).toBeInTheDocument()
+    // 已按需求移除：整体进度与成员头像叠
+    expect(screen.queryByText("78%")).not.toBeInTheDocument()
+    expect(screen.queryByText("+5")).not.toBeInTheDocument()
   })
 
   it("overdue metric uses warn tone when >0", () => {

@@ -1,4 +1,3 @@
-import { useState } from "react"
 import {
   Badge,
   Button,
@@ -25,7 +24,6 @@ const iconBtn =
 
 export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModules }: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
-  const [query, setQuery] = useState("")
 
   return (
     <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-border bg-background px-5">
@@ -85,20 +83,6 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModu
 
       <span className="flex-1" />
 
-      {/* 项目内搜索 */}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-text-faint" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="在项目内搜索…"
-          className="h-9 w-60 rounded-lg border border-border bg-surface pl-9 pr-12 text-[13px] placeholder:text-text-faint transition-colors focus:border-accent focus:outline-none"
-        />
-        <span className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded border border-border bg-surface px-1.5 py-0.5 font-mono text-[11px] text-text-faint">
-          ⌘K
-        </span>
-      </div>
-
       {/* 已装模块 */}
       <Button variant="ghost" size="sm" onClick={onOpenModules} title="已装模块" aria-label="已装模块" className={iconBtn}>
         <Blocks className="h-4 w-4" />
@@ -125,12 +109,6 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModu
           </a>
         </DropdownMenuContent>
       </DropdownMenu>
-
-      {/* 通知 */}
-      <button className={`relative ${iconBtn}`} aria-label="通知">
-        <Bell className="h-[18px] w-[18px]" />
-        <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-warn" />
-      </button>
 
       {/* 用户 */}
       <DropdownMenu>

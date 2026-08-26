@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+﻿import { render, screen, waitFor } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
 import type { AgentClient, AgentReply, Artifact } from "../lib/types"
@@ -16,7 +16,7 @@ function instantClient(reply: Partial<AgentReply> = {}): AgentClient {
 describe("ChatPane", () => {
   it("full flow: welcome → type & send → assistant reply appears", async () => {
     render(<ChatPane agentClient={instantClient()} />)
-    expect(await screen.findByText(/早上好。当前上下文/)).toBeInTheDocument()
+    expect(await screen.findByText(/当前上下文/)).toBeInTheDocument()
 
     const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
     fireEvent.input(box, { target: { value: "列出优先事项" } })

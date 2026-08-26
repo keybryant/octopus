@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+﻿import { render, screen, waitFor } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -20,9 +20,8 @@ describe("App (v5 agent homepage)", () => {
   it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
     render(<App />)
     expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0) // 切换器 + strip
-    expect(screen.getByText("78%")).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByText(/早上好。当前上下文/)).toBeInTheDocument(),
+      expect(screen.getByText(/当前上下文：Octopus Platform · 迭代 4.2/)).toBeInTheDocument(),
     )
     expect(mockedFetchConfig).toHaveBeenCalled()
   })
@@ -73,7 +72,8 @@ describe("App (v5 agent homepage)", () => {
     await user.click(screen.getByTestId("project-switcher"))
     await user.click(screen.getByText("Merchant Portal"))
     // 切换后指标随项目变化
-    expect(screen.getByText("46%")).toBeInTheDocument()
     expect(screen.getByText("迭代 2.8 · 第 3 周")).toBeInTheDocument()
+    expect(screen.getByText("12")).toBeInTheDocument()
+    expect(screen.getByText("/30")).toBeInTheDocument()
   })
 })

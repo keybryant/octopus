@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { PROJECTS } from "../lib/datasource"
@@ -42,12 +42,5 @@ describe("TopBar", () => {
     render(<TopBar {...props} />)
     await user.click(screen.getByRole("button", { name: "已装模块" }))
     expect(props.onOpenModules).toHaveBeenCalledOnce()
-  })
-
-  it("search input is controlled", () => {
-    render(<TopBar {...props} />)
-    const box = screen.getByPlaceholderText("在项目内搜索…")
-    fireEvent.change(box, { target: { value: "认证" } })
-    expect(box).toHaveValue("认证")
   })
 })
