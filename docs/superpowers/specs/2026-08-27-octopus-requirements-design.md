@@ -118,8 +118,12 @@ packages/octopus-requirements/
 | M1 | 包骨架 + 存储单元 + store CRUD + 单测（~~确认 StorageBackend 注入~~ 已确认：ctx.storageDomain） | pnpm test 全绿 |
 | M2 | REST API + 路由单测 | curl 可完成 CRUD |
 | M3 | 前端列表/新建/编辑/删除 + 模块注册 | 浏览器端到端、刷新不丢数据 |
-| M4 | 清理壳内 mock 需求 UI；chat 联动 | 壳内无需求 mock |
-| M5 | README、files 打包、合并 dev 检查 | 可发布形态 |
+| M4 | 清理壳内 mock 需求 UI（~~chat 联动~~ 推迟，agent 创建需求留待后续） | 壳内无需求 mock ✅ 509a0e2 |
+| M5 | README、files 打包、合并 dev 检查 | 可发布形态（未开始） |
+
+## 后续待办（推迟项）
+
+- **chat 联动**：需求插件注册 `create_requirement` DSH 工具（`ctx.tools.register(defineTool(...))`，参照 dsh-tool-todo 模式），让 agent 对话可直接创建需求（source: "chat"）。调研已完成：机制为 `@deepseek-ai/dsh-tools` 的 defineTool + `inject: ["tools"]`。
 
 ## 风险与待确认
 
