@@ -1,63 +1,79 @@
-import { render, screen } from "@testing-library/react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { render, screen, waitFor } from "@testing-library/react"
+import { fireEvent } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { fetchConfig } from "./api"
-import { timeGreeting } from "./greeting"
+import { fetchConfig, fetchModules } from "./api"
 
 vi.mock("./api", () => ({
-  fetchConfig: vi.fn(),
+  fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
 }))
-
 const mockedFetchConfig = vi.mocked(fetchConfig)
+const mockedFetchModules = vi.mocked(fetchModules)
 
-describe("App", () => {
-  beforeEach(() => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(2026, 0, 1, 9, 0, 0))
-  })
+describe("App (v5 agent homepage)", () => {
   afterEach(() => {
-    vi.useRealTimers()
     vi.clearAllMocks()
   })
 
-  it("renders default title and time greeting when config fails", async () => {
-    mockedFetchConfig.mockResolvedValue(null)
+  it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
     render(<App />)
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("My Workbench")
-    expect(screen.getByText("早上好")).toBeInTheDocument()
+    expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0) // 切换器 + strip
+    expect(screen.getByText("78%")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByText(/早上好。当前上下文/)).toBeInTheDocument(),
+    )
+    expect(mockedFetchConfig).toHaveBeenCalled()
   })
 
-  it("uses config title and greeting when provided", async () => {
-    mockedFetchConfig.mockResolvedValue({ title: "我的工作台", greeting: "欢迎回来" })
+  it("opens kanban drawer from strip and closes on Esc", async () => {
+    const user = userEvent.setup()
     render(<App />)
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("我的工作台")
-    expect(screen.getByText("欢迎回来")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
+    fireEvent.keyDown(document, { key: "Escape" })
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "任务看板" })).not.toBeInTheDocument(),
+    )
   })
 
-  it("renders quick links", () => {
-    render(<App />)
-    expect(screen.getByRole("link", { name: "进入主界面" })).toHaveAttribute("href", "/")
-    expect(screen.getByRole("link", { name: "插件市场" })).toHaveAttribute("href", "/marketplace")
-    expect(screen.getByRole("link", { name: "设置" })).toHaveAttribute("href", "/settings")
-  })
-
-  it("renders module cards from the modules api", async () => {
-    const { fetchModules } = await import("./api")
-    vi.mocked(fetchModules).mockResolvedValue([
+  it("modules drawer keeps lazy-load chain alive", async () => {
+    mockedFetchModules.mockResolvedValue([
       { id: "quickstart", title: "快捷入口", entry: "/octopus/quickstart/assets/index.js" },
     ])
+    const user = userEvent.setup()
     render(<App />)
+    await user.click(screen.getByRole("button", { name: "已装模块" }))
     expect(await screen.findByRole("button", { name: "快捷入口" })).toBeInTheDocument()
   })
-})
 
-describe("timeGreeting", () => {
-  it("greets by hour ranges", () => {
-    expect(timeGreeting(7)).toBe("早上好")
-    expect(timeGreeting(12)).toBe("中午好")
-    expect(timeGreeting(15)).toBe("下午好")
-    expect(timeGreeting(22)).toBe("晚上好")
-    expect(timeGreeting(3)).toBe("晚上好")
+  it("chat send round-trip shows assistant cards and artifacts rail", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
+    await user.type(box, "列出优先事项")
+    fireEvent.keyDown(box, { key: "Enter" })
+    expect(await screen.findByText("让 Agent 接手 →")).toBeInTheDocument()
+    expect(screen.getByText("本会话产出")).toBeInTheDocument()
+  })
+
+  it("artifacts rail collapses and restores", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByTitle("收起"))
+    expect(screen.queryByText("本会话产出")).not.toBeInTheDocument()
+    await user.click(screen.getByTitle("展开产出面板"))
+    expect(screen.getByText("本会话产出")).toBeInTheDocument()
+  })
+
+  it("project switcher swaps strip metrics", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByTestId("project-switcher"))
+    await user.click(screen.getByText("Merchant Portal"))
+    // 切换后指标随项目变化
+    expect(screen.getByText("46%")).toBeInTheDocument()
+    expect(screen.getByText("迭代 2.8 · 第 3 周")).toBeInTheDocument()
   })
 })
