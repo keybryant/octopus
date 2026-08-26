@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { ThemeProvider } from "octopus-ui"
-import { fetchConfig, type WorkbenchConfig } from "./api"
+import { createProject, deleteProject, fetchConfig, fetchProjects, updateProject, type ProjectRecordView, type WorkbenchConfig } from "./api"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { NewRequirementModal } from "./components/NewRequirementModal"
+import { ProjectSettingsModal, type SettingsProject } from "./components/ProjectSettingsModal"
 import { ProjectStrip } from "./components/ProjectStrip"
 import { RequirementsDrawer } from "./components/RequirementsDrawer"
 import { TopBar } from "./components/TopBar"
@@ -34,16 +35,47 @@ function nextId(items: { id: string }[], prefix: string): string {
   return `${prefix}${max + 1}`
 }
 
+function toSummary(p: ProjectRecordView): ProjectSummary {
+  return {
+    id: p.id,
+    name: p.name,
+    shortName: deriveShortName(p.name),
+    description: p.description || "暂无描述",
+    iteration: "未排期",
+    dueDate: "-",
+    progressPct: 0,
+    weeklyDone: 0,
+    weeklyTotal: 0,
+    activeRequirements: 0,
+    overdue: 0,
+    members: [],
+  }
+}
+
 export default function App() {
   const [config, setConfig] = useState<WorkbenchConfig | null>(null)
   useEffect(() => {
     void fetchConfig().then(setConfig)
   }, [])
 
-  // ── 项目域状态（mock 数据源 + 本会话新增）──
+  // ── 项目域状态（插件 API 可用时接管；否则 mock 数据源 + 本会话新增）──
   const [projects, setProjects] = useState<ProjectSummary[]>(PROJECTS)
   const [projectId, setProjectId] = useState(projects[0].id)
+  const [records, setRecords] = useState<Record<string, ProjectRecordView>>({})
+  const [usingApi, setUsingApi] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const current = projects.find((p) => p.id === projectId) ?? projects[0]
+
+  useEffect(() => {
+    void fetchProjects().then((items) => {
+      if (!items || items.length === 0) return // 服务不在或空 → 保持 mock
+      setUsingApi(true)
+      const sorted = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      setRecords(Object.fromEntries(sorted.map((p) => [p.id, p])))
+      setProjects(sorted.map(toSummary))
+      setProjectId(sorted[0].id)
+    })
+  }, [])
 
   // ── 需求 / 看板 ──
   const [requirements, setRequirements] = useState<Requirement[]>(REQUIREMENTS)
@@ -59,7 +91,18 @@ export default function App() {
 
   const agentClient = useMemo(createDefaultAgentClient, [])
 
-  const handleCreateProject = (data: { name: string; description: string }) => {
+  const handleCreateProject = async (data: { name: string; description: string }) => {
+    if (usingApi) {
+      const created = await createProject({ name: data.name, description: data.description })
+      if (!created) {
+        console.warn("[octopus] 创建项目失败")
+        return
+      }
+      setRecords((prev) => ({ ...prev, [created.id]: created }))
+      setProjects((prev) => [...prev, toSummary(created)])
+      setProjectId(created.id)
+      return
+    }
     const project: ProjectSummary = {
       id: `project-${Date.now()}`,
       name: data.name,
@@ -76,6 +119,45 @@ export default function App() {
     }
     setProjects((prev) => [...prev, project])
     setProjectId(project.id)
+  }
+
+  // ── 项目设置弹窗（仅 API 模式有真实记录可编辑）──
+  const settingsTarget: SettingsProject | null = (() => {
+    const rec = records[projectId]
+    if (!rec) return null
+    return {
+      id: rec.id,
+      name: rec.name,
+      description: rec.description,
+      status: rec.status,
+      workspacePath: rec.workspacePath,
+      createdAt: rec.createdAt,
+    }
+  })()
+
+  const handleSaveSettings = async (data: { description: string; status: SettingsProject["status"] }) => {
+    if (!usingApi || !settingsTarget) return false
+    const ok = await updateProject(settingsTarget.id, data)
+    if (!ok) return false
+    setRecords((prev) => ({ ...prev, [settingsTarget.id]: { ...prev[settingsTarget.id], ...data } }))
+    setProjects((prev) =>
+      prev.map((p) => (p.id === settingsTarget.id ? { ...p, description: data.description || "暂无描述" } : p)),
+    )
+    return true
+  }
+
+  const handleDeleteSettings = async () => {
+    if (!usingApi || !settingsTarget) return false
+    const ok = await deleteProject(settingsTarget.id)
+    if (!ok) return false
+    const restRecords = { ...records }
+    delete restRecords[settingsTarget.id]
+    setRecords(restRecords)
+    const rest = projects.filter((p) => p.id !== settingsTarget.id)
+    const next = rest.length > 0 ? rest : PROJECTS // 删空回落 mock（与列表策略一致）
+    setProjects(next)
+    setProjectId(next[0].id)
+    return true
   }
 
   const handleCreateRequirement = (data: { title: string; priority: "P0" | "P1" | "P2" }) => {
@@ -103,6 +185,7 @@ export default function App() {
           currentProjectId={projectId}
           onSwitchProject={setProjectId}
           onOpenNewProject={() => setNewProjectOpen(true)}
+          onOpenProjectSettings={() => setSettingsOpen(true)}
         />
 
         <ProjectStrip
@@ -143,6 +226,13 @@ export default function App() {
           open={newRequirementOpen}
           onClose={() => setNewRequirementOpen(false)}
           onCreate={handleCreateRequirement}
+        />
+        <ProjectSettingsModal
+          open={settingsOpen && settingsTarget !== null}
+          onClose={() => setSettingsOpen(false)}
+          project={settingsTarget}
+          onSave={handleSaveSettings}
+          onDelete={handleDeleteSettings}
         />
       </div>
     </ThemeProvider>

@@ -3,17 +3,25 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { fetchConfig } from "./api"
+import { deleteProject, fetchConfig, fetchProjects, updateProject } from "./api"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
+  fetchProjects: vi.fn().mockResolvedValue(null), // 默认走 mock 回退，保住既有用例
+  createProject: vi.fn(),
+  updateProject: vi.fn().mockResolvedValue(true),
+  deleteProject: vi.fn().mockResolvedValue(true),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
+const mockedFetchProjects = vi.mocked(fetchProjects)
+const mockedUpdateProject = vi.mocked(updateProject)
+const mockedDeleteProject = vi.mocked(deleteProject)
 
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
     vi.clearAllMocks()
+    mockedFetchProjects.mockResolvedValue(null)
   })
 
   it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
@@ -64,6 +72,81 @@ describe("App (v5 agent homepage)", () => {
     expect(screen.getByText("迭代 2.8 · 第 3 周")).toBeInTheDocument()
     expect(screen.getByText("12")).toBeInTheDocument()
     expect(screen.getByText("/30")).toBeInTheDocument()
+  })
+
+  it("loads projects from api when available", async () => {
+    mockedFetchProjects.mockResolvedValue([
+      {
+        id: "p-api",
+        name: "API Project",
+        description: "",
+        status: "active",
+        workspacePath: "~/r/API Project",
+        workspaceId: "w",
+        createdAt: "2026-08-26T00:00:00.000Z",
+      },
+    ])
+    render(<App />)
+    expect(await screen.findAllByText("API Project").then((els) => els.length)).toBeGreaterThan(0)
+  })
+
+  it("settings modal saves status change via PATCH", async () => {
+    mockedFetchProjects.mockResolvedValue([
+      {
+        id: "p-api",
+        name: "API Project",
+        description: "d",
+        status: "active",
+        workspacePath: "~/r/API Project",
+        workspaceId: "w",
+        createdAt: "2026-08-26T00:00:00.000Z",
+      },
+    ])
+    render(<App />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByTitle("设置"))
+    await user.click(screen.getByText("项目设置"))
+    fireEvent.click(await screen.findByText("已暂停"))
+    fireEvent.click(screen.getByRole("button", { name: "保存" }))
+    await waitFor(() =>
+      expect(mockedUpdateProject).toHaveBeenCalledWith("p-api", { description: "d", status: "paused" }),
+    )
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "保存" })).not.toBeInTheDocument(),
+    )
+  })
+
+  it("settings modal deletes project and falls back to remaining list", async () => {
+    mockedFetchProjects.mockResolvedValue([
+      {
+        id: "p-a",
+        name: "Alpha",
+        description: "",
+        status: "active",
+        workspacePath: "~/r/A",
+        workspaceId: "w",
+        createdAt: "2026-08-25T00:00:00.000Z",
+      },
+      {
+        id: "p-b",
+        name: "Beta",
+        description: "",
+        status: "active",
+        workspacePath: "~/r/B",
+        workspaceId: "w",
+        createdAt: "2026-08-26T00:00:00.000Z",
+      },
+    ])
+    render(<App />)
+    const user = userEvent.setup()
+    await user.click(await screen.findByTitle("设置"))
+    await user.click(screen.getByText("项目设置"))
+    fireEvent.click(await screen.findByRole("button", { name: "删除项目" }))
+    fireEvent.click(screen.getByRole("button", { name: "确认删除？" }))
+    // 当前选中的是最新项目 p-b
+    await waitFor(() => expect(mockedDeleteProject).toHaveBeenCalledWith("p-b"))
+    // 回落到剩余第一项
+    await waitFor(() => expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0))
   })
 })
 
