@@ -53,26 +53,43 @@ export function useChat(client: AgentClient): {
       setStatus("thinking")
 
       const startedAt = Date.now()
-      void client.reply(trimmed).then((reply) => {
-        const elapsedMs = Date.now() - startedAt
-        const assistantMsg: ChatMessage = {
-          id: nextId("msg"),
-          role: "assistant",
-          time: nowHHmm(),
-          blocks: reply.blocks,
-          meta: `${nowHHmm()} · gpt-4 · ${(elapsedMs / 1000).toFixed(1)}s`,
-        }
-        setMessages((prev) => [...prev, assistantMsg])
-        if (reply.artifacts?.length) {
-          setArtifacts((prev) => {
-            const seen = new Set(prev.map((a) => a.id))
-            const fresh = reply.artifacts!.filter((a) => !seen.has(a.id))
-            return [...prev, ...fresh]
-          })
-        }
+      const finalize = () => {
         setStatus("idle")
         busyRef.current = false
-      })
+      }
+      void client
+        .reply(trimmed)
+        .then((reply) => {
+          const elapsedMs = Date.now() - startedAt
+          const assistantMsg: ChatMessage = {
+            id: nextId("msg"),
+            role: "assistant",
+            time: nowHHmm(),
+            blocks: reply.blocks,
+            meta: `${nowHHmm()} · gpt-4 · ${(elapsedMs / 1000).toFixed(1)}s`,
+          }
+          setMessages((prev) => [...prev, assistantMsg])
+          if (reply.artifacts?.length) {
+            setArtifacts((prev) => {
+              const seen = new Set(prev.map((a) => a.id))
+              const fresh = reply.artifacts!.filter((a) => !seen.has(a.id))
+              return [...prev, ...fresh]
+            })
+          }
+          finalize()
+        })
+        .catch(() => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextId("msg"),
+              role: "assistant",
+              time: nowHHmm(),
+              text: "抱歉，这次请求失败了，请稍后重试。",
+            },
+          ])
+          finalize()
+        })
     },
     [client],
   )

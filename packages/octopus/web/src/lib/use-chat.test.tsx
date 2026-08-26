@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { createMockAgentClient } from "./agent-client"
+import type { AgentClient, AgentReply } from "./types"
 import { useChat } from "./use-chat"
 
 describe("useChat", () => {
@@ -48,5 +49,29 @@ describe("useChat", () => {
     act(() => result.current.send("b"))
     await waitFor(() => expect(result.current.status).toBe("idle"))
     expect(result.current.messages.filter((m) => m.role === "user")).toHaveLength(1)
+  })
+
+  it("recovers when reply rejects and stays usable", async () => {
+    const replies: Promise<AgentReply>[] = [
+      Promise.reject(new Error("boom")),
+      Promise.resolve({ blocks: [{ kind: "paragraph", segs: [{ text: "ok" }] }] }),
+    ]
+    const client: AgentClient = { reply: () => replies.shift()! }
+    const { result } = renderHook(() => useChat(client))
+
+    act(() => result.current.send("first"))
+    expect(result.current.status).toBe("thinking")
+    await waitFor(() => expect(result.current.status).toBe("idle"))
+
+    const errMsg = result.current.messages.at(-1)!
+    expect(errMsg.role).toBe("assistant")
+    expect(errMsg.text).toContain("失败")
+
+    // 失败后 busy 复位，可继续发送
+    act(() => result.current.send("second"))
+    await waitFor(() =>
+      expect(result.current.messages.at(-1)?.blocks?.some((b) => b.kind === "paragraph")).toBe(true),
+    )
+    expect(result.current.status).toBe("idle")
   })
 })

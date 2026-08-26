@@ -25,6 +25,18 @@ describe("Composer", () => {
     expect(box).toHaveValue("")
   })
 
+  it("does not submit on Enter during IME composition", () => {
+    const onSend = vi.fn()
+    render(<Composer quickPrompts={[]} contextLabel="c" onSend={onSend} />)
+    const box = screen.getByPlaceholderText(PLACEHOLDER)
+    fireEvent.input(box, { target: { value: "nihao" } })
+    fireEvent.keyDown(box, { key: "Enter", isComposing: true })
+    expect(onSend).not.toHaveBeenCalled()
+    // 组合结束后同一文本可正常发送
+    fireEvent.keyDown(box, { key: "Enter" })
+    expect(onSend).toHaveBeenCalledWith("nihao")
+  })
+
   it("send button submits trimmed text", () => {
     const onSend = vi.fn()
     render(<Composer quickPrompts={[]} contextLabel="c" onSend={onSend} />)
