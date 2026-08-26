@@ -18,4 +18,5 @@ export {
   type DropdownMenuItemProps,
 } from "./overlays/dropdown-menu"
 export { Sheet, type SheetProps } from "./overlays/sheet"
+export { Modal, type ModalProps } from "./overlays/modal"
 export * from "./icons"
