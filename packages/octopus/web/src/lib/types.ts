@@ -100,6 +100,15 @@ export interface Requirement {
   progressPct: number
 }
 
+export type Priority = "P0" | "P1" | "P2"
+
+/** NewTaskModal 的表单输出 */
+export interface NewTaskInput {
+  title: string
+  priority: Priority
+  assignee?: string
+}
+
 /** agent 回复：富块 + 产生的会话产出物 */
 export interface AgentReply {
   blocks: MessageBlock[]

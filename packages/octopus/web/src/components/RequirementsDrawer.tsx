@@ -1,6 +1,6 @@
 import { Badge, ProgressBar, Sheet } from "octopus-ui"
 import type { BadgeTone as UiBadgeTone } from "octopus-ui"
-import { REQUIREMENTS } from "../lib/datasource"
+import type { Requirement } from "../lib/types"
 
 const toneMap: Record<string, UiBadgeTone> = {
   green: "success",
@@ -9,13 +9,19 @@ const toneMap: Record<string, UiBadgeTone> = {
   orange: "warn",
 }
 
-export function RequirementsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+export interface RequirementsDrawerProps {
+  open: boolean
+  onClose: () => void
+  requirements: Requirement[]
+}
+
+export function RequirementsDrawer({ open, onClose, requirements }: RequirementsDrawerProps) {
   return (
     <Sheet
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title="需求池"
-      subtitle="Octopus Platform · 24 个活跃需求"
+      subtitle={`Octopus Platform · ${requirements.length} 个需求`}
     >
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-[13px]">
@@ -29,10 +35,10 @@ export function RequirementsDrawer({ open, onClose }: { open: boolean; onClose: 
             </tr>
           </thead>
           <tbody>
-            {REQUIREMENTS.map((r) => (
+            {requirements.map((r) => (
               <tr
                 key={r.id}
-                className="cursor-pointer divide-x divide-transparent border-b border-border/60 transition-colors last:border-0 hover:bg-surface"
+                className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-surface"
               >
                 <td className="px-4 py-3.5 font-mono text-xs text-text-faint">{r.id}</td>
                 <td className="px-4 py-3.5 font-medium">{r.title}</td>
@@ -48,6 +54,13 @@ export function RequirementsDrawer({ open, onClose }: { open: boolean; onClose: 
                 </td>
               </tr>
             ))}
+            {requirements.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-xs text-text-faint">
+                  需求池为空
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

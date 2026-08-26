@@ -66,3 +66,48 @@ describe("App (v5 agent homepage)", () => {
     expect(screen.getByText("/30")).toBeInTheDocument()
   })
 })
+
+describe("App creation flows", () => {
+  afterEach(() => vi.clearAllMocks())
+
+  it("creates a project via switcher menu and switches to it", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByTestId("project-switcher"))
+    await user.click(screen.getByText("新建项目"))
+    fireEvent.change(screen.getByPlaceholderText(/例如：Octopus Platform/), {
+      target: { value: "Merchant Portal" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建项目" }))
+    // 自动切换到新项目
+    expect(screen.getByText("未排期")).toBeInTheDocument()
+    // 切换器列表中出现新项目
+    await user.click(screen.getByTestId("project-switcher"))
+    expect(screen.getAllByText("Merchant Portal").length).toBeGreaterThan(0)
+  })
+
+  it("creates a requirement via strip button and shows it in drawer", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /新建需求/ }))
+    fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
+      target: { value: "品牌全新的需求条目" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建需求" }))
+
+    await user.click(screen.getAllByRole("button", { name: /需求池/ })[0])
+    expect(await screen.findByText("品牌全新的需求条目")).toBeInTheDocument()
+  })
+
+  it("creates a task via kanban drawer and shows it in 待处理", async () => {
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    await user.click(await screen.findByRole("button", { name: /新建任务/ }))
+    fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {
+      target: { value: "看板里冒出来的新任务" },
+    })
+    await user.click(screen.getByRole("button", { name: "创建任务" }))
+    expect(await screen.findByText("看板里冒出来的新任务")).toBeInTheDocument()
+  })
+})

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+﻿import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 import { PROJECTS } from "../lib/datasource"
@@ -8,7 +8,7 @@ const props = {
   projects: PROJECTS,
   currentProjectId: "octopus-platform",
   onSwitchProject: vi.fn(),
-  onOpenModules: vi.fn(),
+  onOpenNewProject: vi.fn(),
 }
 
 describe("TopBar", () => {

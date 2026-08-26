@@ -1,4 +1,4 @@
-import {
+﻿import {
   Badge,
   DropdownMenu,
   DropdownMenuContent,
@@ -15,12 +15,13 @@ export interface TopBarProps {
   projects: ProjectSummary[]
   currentProjectId: string
   onSwitchProject: (id: string) => void
+  onOpenNewProject: () => void
 }
 
 const iconBtn =
   "p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface transition-colors duration-fast"
 
-export function TopBar({ projects, currentProjectId, onSwitchProject }: TopBarProps) {
+export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewProject }: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
 
   return (
@@ -70,7 +71,7 @@ export function TopBar({ projects, currentProjectId, onSwitchProject }: TopBarPr
             )
           })}
           <DropdownMenuSeparator />
-          <DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenNewProject}>
             <Plus className="h-4 w-4" />
             新建项目
           </DropdownMenuItem>
