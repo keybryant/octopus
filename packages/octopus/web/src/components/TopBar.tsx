@@ -15,13 +15,12 @@ export interface TopBarProps {
   projects: ProjectSummary[]
   currentProjectId: string
   onSwitchProject: (id: string) => void
-  onOpenModules: () => void
 }
 
 const iconBtn =
   "p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface transition-colors duration-fast"
 
-export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModules }: TopBarProps) {
+export function TopBar({ projects, currentProjectId, onSwitchProject }: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
 
   return (
@@ -92,7 +91,6 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenModu
           <DropdownMenuItem>项目设置</DropdownMenuItem>
           <DropdownMenuItem>成员与权限</DropdownMenuItem>
           <DropdownMenuItem>仓库与集成</DropdownMenuItem>
-          <DropdownMenuItem onSelect={onOpenModules}>已装模块</DropdownMenuItem>
           <DropdownMenuItem>自动化规则</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuLabel>全局</DropdownMenuLabel>

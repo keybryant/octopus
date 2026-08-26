@@ -3,14 +3,13 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { fetchConfig, fetchModules } from "./api"
+import { fetchConfig } from "./api"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
-const mockedFetchModules = vi.mocked(fetchModules)
 
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
@@ -35,17 +34,6 @@ describe("App (v5 agent homepage)", () => {
     await waitFor(() =>
       expect(screen.queryByRole("heading", { name: "任务看板" })).not.toBeInTheDocument(),
     )
-  })
-
-  it("modules drawer keeps lazy-load chain alive (entry via settings menu)", async () => {
-    mockedFetchModules.mockResolvedValue([
-      { id: "quickstart", title: "快捷入口", entry: "/octopus/quickstart/assets/index.js" },
-    ])
-    const user = userEvent.setup()
-    render(<App />)
-    await user.click(screen.getByLabelText("设置"))
-    await user.click(screen.getByText("已装模块"))
-    expect(await screen.findByRole("button", { name: "快捷入口" })).toBeInTheDocument()
   })
 
   it("chat send round-trip shows assistant cards and artifacts rail", async () => {

@@ -36,12 +36,4 @@ describe("TopBar", () => {
     // dsh-web-frontend 无 /marketplace、/settings 路由，旧首页链接为死链，不保留
     expect(screen.queryByRole("link", { name: "插件市场" })).not.toBeInTheDocument()
   })
-
-  it("settings menu opens installed-modules entry (topbar icon removed)", async () => {
-    const user = userEvent.setup()
-    render(<TopBar {...props} />)
-    await user.click(screen.getByLabelText("设置"))
-    await user.click(screen.getByText("已装模块"))
-    expect(props.onOpenModules).toHaveBeenCalledOnce()
-  })
 })
