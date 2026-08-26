@@ -1,0 +1,224 @@
+import type { HttpRequest, HttpResponse } from "octopus"
+import type { RequirementStore } from "./store.js"
+import {
+  PRIORITIES,
+  REQUIREMENT_STATUSES,
+  RequirementsError,
+  type Priority,
+  type RequirementInput,
+  type RequirementPatch,
+  type RequirementSource,
+  type RequirementStatus,
+} from "./types.js"
+
+export const API_PREFIX = "/api/octopus-requirements"
+export const REQUIREMENTS_PATH = API_PREFIX + "/requirements"
+
+/** 路由处理器：参数化路径由内部匹配，method 自行分发 */
+export type RouteHandler = (req: HttpRequest, res: HttpResponse) => Promise<void>
+
+class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    message: string,
+  ) {
+    super(message)
+    this.name = "ApiError"
+  }
+}
+
+/** 读取请求体并解析 JSON；空 body 返回 undefined；非法 JSON 抛 400 */
+export async function readJsonBody(req: HttpRequest): Promise<unknown> {
+  const chunks: Buffer[] = []
+  for await (const chunk of req as unknown as AsyncIterable<Buffer>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  if (chunks.length === 0) return undefined
+  const raw = Buffer.concat(chunks).toString("utf8")
+  try {
+    return JSON.parse(raw)
+  } catch {
+    throw new ApiError(400, "invalid-json", "request body is not valid JSON")
+  }
+}
+
+function json(res: HttpResponse, status: number, payload: unknown): void {
+  res.writeHead(status, { "content-type": "application/json; charset=utf-8" })
+  res.end(JSON.stringify(payload))
+}
+
+function ok(res: HttpResponse, data: unknown): void {
+  json(res, 200, { ok: true, data })
+}
+
+function fail(res: HttpResponse, status: number, code: string, message: string): void {
+  json(res, status, { ok: false, error: { code, message } })
+}
+
+function pathnameOf(req: HttpRequest): string {
+  try {
+    return new URL(req.url ?? "/", "http://localhost").pathname
+  } catch {
+    throw new ApiError(400, "bad-request", "malformed request url")
+  }
+}
+
+function parseId(pathname: string): string | null {
+  const match = pathname.match(new RegExp("^" + REQUIREMENTS_PATH.replaceAll("/", "\/") + "\/([^/]+)$"))
+  if (!match) return null
+  try {
+    return decodeURIComponent(match[1])
+  } catch {
+    throw new ApiError(400, "bad-request", "malformed requirement id")
+  }
+}
+
+function isStatus(value: unknown): value is RequirementStatus {
+  return typeof value === "string" && (REQUIREMENT_STATUSES as readonly string[]).includes(value)
+}
+
+function isPriority(value: unknown): value is Priority {
+  return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
+}
+
+function isSource(value: unknown): value is RequirementSource {
+  return value === "manual" || value === "chat"
+}
+
+/** 校验并归一化创建入参（多余字段忽略） */
+export function parseCreateInput(body: unknown): RequirementInput {
+  if (typeof body !== "object" || body === null) {
+    throw new ApiError(400, "invalid-input", "request body must be a JSON object")
+  }
+  const raw = body as Record<string, unknown>
+  if (typeof raw.title !== "string") {
+    throw new ApiError(400, "invalid-input", "title is required")
+  }
+  const input: RequirementInput = { title: raw.title }
+  if (raw.description !== undefined) {
+    if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
+    input.description = raw.description
+  }
+  if (raw.priority !== undefined) {
+    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
+    input.priority = raw.priority
+  }
+  if (raw.source !== undefined) {
+    if (!isSource(raw.source)) throw new ApiError(400, "invalid-input", "source must be manual or chat")
+    input.source = raw.source
+  }
+  return input
+}
+
+/** 校验并归一化更新入参 */
+export function parsePatchInput(body: unknown): RequirementPatch {
+  if (typeof body !== "object" || body === null) {
+    throw new ApiError(400, "invalid-input", "request body must be a JSON object")
+  }
+  const raw = body as Record<string, unknown>
+  const patch: RequirementPatch = {}
+  if (raw.title !== undefined) {
+    if (typeof raw.title !== "string") throw new ApiError(400, "invalid-input", "title must be a string")
+    patch.title = raw.title
+  }
+  if (raw.description !== undefined) {
+    if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
+    patch.description = raw.description
+  }
+  if (raw.priority !== undefined) {
+    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
+    patch.priority = raw.priority
+  }
+  if (raw.status !== undefined) {
+    if (!isStatus(raw.status)) throw new ApiError(400, "invalid-input", `status must be one of ${REQUIREMENT_STATUSES.join(", ")}`)
+    patch.status = raw.status
+  }
+  if (raw.owner !== undefined) {
+    if (raw.owner !== null && typeof raw.owner !== "string") {
+      throw new ApiError(400, "invalid-input", "owner must be a string or null")
+    }
+    patch.owner = raw.owner
+  }
+  return patch
+}
+
+function listQuery(req: HttpRequest): { status?: RequirementStatus; priority?: Priority } {
+  const url = new URL(req.url ?? "/", "http://localhost")
+  const status = url.searchParams.get("status")
+  const priority = url.searchParams.get("priority")
+  const query: { status?: RequirementStatus; priority?: Priority } = {}
+  if (status !== null) {
+    if (!isStatus(status)) throw new ApiError(400, "invalid-input", `status must be one of ${REQUIREMENT_STATUSES.join(", ")}`)
+    query.status = status
+  }
+  if (priority !== null) {
+    if (!isPriority(priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
+    query.priority = priority
+  }
+  return query
+}
+
+/** 单前缀路由入口：内部按 pathname + method 分发 */
+export function createRequirementApiHandler(store: RequirementStore): RouteHandler {
+  return async function handler(req: HttpRequest, res: HttpResponse) {
+    try {
+      await dispatch(store, req, res)
+    } catch (error) {
+      if (error instanceof ApiError) {
+        fail(res, error.status, error.code, error.message)
+      } else if (error instanceof RequirementsError) {
+        const status = error.code === "not-found" ? 404 : error.code === "invalid-transition" ? 422 : 400
+        fail(res, status, error.code, error.message)
+      } else {
+        fail(res, 500, "internal", error instanceof Error ? error.message : String(error))
+      }
+    }
+  }
+}
+
+async function dispatch(store: RequirementStore, req: HttpRequest, res: HttpResponse): Promise<void> {
+  const method = (req.method ?? "GET").toUpperCase()
+  const pathname = pathnameOf(req)
+
+  if (pathname === REQUIREMENTS_PATH) {
+    if (method === "GET") {
+      const { status, priority } = listQuery(req)
+      ok(res, store.list().filter((r) => (status === undefined || r.status === status) && (priority === undefined || r.priority === priority)))
+      return
+    }
+    if (method === "POST") {
+      const input = parseCreateInput(await readJsonBody(req))
+      const record = await store.create(input)
+      json(res, 201, { ok: true, data: record })
+      return
+    }
+    fail(res, 405, "method-not-allowed", `method ${method} not allowed on ${REQUIREMENTS_PATH}`)
+    return
+  }
+
+  const id = parseId(pathname)
+  if (id !== null) {
+    if (method === "GET") {
+      const record = store.get(id)
+      if (!record) throw new RequirementsError("not-found", `requirement ${id} not found`)
+      ok(res, record)
+      return
+    }
+    if (method === "PATCH") {
+      const patch = parsePatchInput(await readJsonBody(req))
+      const record = await store.update(id, patch)
+      ok(res, record)
+      return
+    }
+    if (method === "DELETE") {
+      const removed = await store.remove(id)
+      ok(res, removed)
+      return
+    }
+    fail(res, 405, "method-not-allowed", `method ${method} not allowed on requirement ${id}`)
+    return
+  }
+
+  fail(res, 404, "not-found", `no route for ${method} ${pathname}`)
+}
