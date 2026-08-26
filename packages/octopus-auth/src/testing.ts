@@ -1,8 +1,5 @@
+import { UsersError } from "octopus-users"
 import type { SessionRecord, UserRecord, UsersService } from "octopus-users"
-
-function codeError(code: string, message: string): Error & { code: string } {
-  return Object.assign(new Error(`[octopus-users] ${message}`), { code })
-}
 
 export function createFakeUsers(seed: UserRecord[] = []): UsersService & {
   _users: Map<string, UserRecord>
@@ -23,9 +20,9 @@ export function createFakeUsers(seed: UserRecord[] = []): UsersService & {
 
     async createUser(input) {
       const trimmed = input.username.trim()
-      if (!trimmed || /\s/.test(trimmed)) throw codeError("invalid", "用户名非法")
+      if (!trimmed || /\s/.test(trimmed)) throw new UsersError("invalid", "用户名非法")
       const dup = [...users.values()].some((u) => u.username.toLowerCase() === trimmed.toLowerCase())
-      if (dup) throw codeError("conflict", "用户名已存在")
+      if (dup) throw new UsersError("conflict", "用户名已存在")
       const rec: UserRecord = {
         id: crypto.randomUUID(), username: trimmed, passwordHash: input.passwordHash,
         role: input.role, disabled: false, createdAt: Date.now(),
@@ -36,14 +33,14 @@ export function createFakeUsers(seed: UserRecord[] = []): UsersService & {
 
     async updateUser(id, patch) {
       const existing = users.get(id)
-      if (!existing) throw codeError("not-found", "用户不存在")
+      if (!existing) throw new UsersError("not-found", "用户不存在")
       const updated = { ...existing, ...patch }
       users.set(id, updated)
       return updated
     },
 
     async deleteUser(id) {
-      if (!users.has(id)) throw codeError("not-found", "用户不存在")
+      if (!users.has(id)) throw new UsersError("not-found", "用户不存在")
       users.delete(id)
       for (const [k, s] of sessions) if (s.userId === id) sessions.delete(k)
     },
