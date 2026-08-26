@@ -15,10 +15,9 @@ export function apply(ctx: Context) {
       ctx.workbench.register({
         id: "users-view",
         title: "用户管理",
-        access: "admin",
         order: 900,
         entry: "/octopus/users-view/assets/index.js",
-      }),
+      } as any),
       ctx.webServer.register({
         kind: "prefix",
         path: "/octopus/users-view/assets",

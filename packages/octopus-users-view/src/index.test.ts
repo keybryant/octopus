@@ -10,7 +10,6 @@ describe("octopus-users-view", () => {
     expect(workbench.register).toHaveBeenCalledWith({
       id: "users-view",
       title: "用户管理",
-      access: "admin",
       order: 900,
       entry: "/octopus/users-view/assets/index.js",
     })
