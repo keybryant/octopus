@@ -71,13 +71,13 @@ describe("createUsersService", () => {
     await expect(service.getSession("live")).resolves.toBeNull()
   })
 
-  it("每用户最多 20 个会话，超出逐出最旧", async () => {
+  it("每用户活跃会话上限 20，超出逐出 createdAt 最旧的一条", async () => {
     const base = Date.now()
     for (let i = 0; i <= 20; i++) {
       await service.putSession({ id: `s${i}`, userId: "u1", createdAt: base + i, expiresAt: base + 999_999 })
     }
     await expect(service.getSession("s0")).resolves.toBeNull()
-    await expect(service.getSession("s1")).resolves.toBeNull()
+    await expect(service.getSession("s1")).resolves.toBeTruthy()
     await expect(service.getSession("s20")).resolves.toMatchObject({ id: "s20" })
   })
 

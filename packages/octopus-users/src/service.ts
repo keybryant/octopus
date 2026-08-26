@@ -130,7 +130,7 @@ export function createUsersService(backend: StorageBackend): UsersService {
         const mine = Object.values(sessionsOf(await unit.loadAll()))
           .filter((s) => s.userId === record.userId)
           .sort((a, b) => a.createdAt - b.createdAt)
-        let excess = mine.length - MAX_SESSIONS_PER_USER + 1
+        let excess = mine.length - MAX_SESSIONS_PER_USER
         for (const s of mine) {
           if (excess <= 0) break
           await unit.deleteRecord("sessions", s.id)
