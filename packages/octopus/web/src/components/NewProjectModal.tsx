@@ -1,39 +1,27 @@
-import { Modal, Input, Textarea, Button } from "octopus-ui"
 import { useState } from "react"
+import { Avatar, Button, Input, Modal, Textarea } from "octopus-ui"
+import { deriveShortName } from "../lib/short-name"
 
 export interface NewProjectModalProps {
   open: boolean
   onClose: () => void
-  onCreate: (data: { name: string; shortName: string; description: string }) => void
-}
-
-/** 由名称推导两字母缩写：中文取前两字，英文取前两个单词首字母 */
-export function deriveShortName(name: string): string {
-  const trimmed = name.trim()
-  if (!trimmed) return ""
-  if (/[\u4e00-\u9fa5]/.test(trimmed)) return trimmed.slice(0, 2)
-  const words = trimmed.split(/\s+/).filter(Boolean)
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
-  return trimmed.slice(0, 2).toUpperCase()
+  onCreate: (data: { name: string; description: string }) => void
 }
 
 export function NewProjectModal({ open, onClose, onCreate }: NewProjectModalProps) {
   const [name, setName] = useState("")
-  const [shortName, setShortName] = useState("")
   const [description, setDescription] = useState("")
 
-  const effectiveShort = shortName.trim() || deriveShortName(name)
+  const preview = deriveShortName(name)
   const canSubmit = name.trim().length > 0
 
   const submit = () => {
     if (!canSubmit) return
     onCreate({
       name: name.trim(),
-      shortName: effectiveShort.toUpperCase().slice(0, 2),
       description: description.trim(),
     })
     setName("")
-    setShortName("")
     setDescription("")
     onClose()
   }
@@ -47,27 +35,20 @@ export function NewProjectModal({ open, onClose, onCreate }: NewProjectModalProp
     >
       <div className="space-y-4">
         <div>
-          <div className="mb-1.5 text-xs text-muted-foreground">项目名称 *</div>
+          <div className="mb-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+            项目名称 *
+            {preview && (
+              <span className="inline-flex items-center gap-1.5 text-text-faint">
+                头像
+                <Avatar initials={preview} size="xs" />
+              </span>
+            )}
+          </div>
           <Input
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="例如：Octopus Platform"
-          />
-        </div>
-        <div>
-          <div className="mb-1.5 text-xs text-muted-foreground">
-            缩写标识
-            {effectiveShort && (
-              <span className="ml-2 font-mono text-accent">{effectiveShort.toUpperCase()}</span>
-            )}
-          </div>
-          <Input
-            value={shortName}
-            onChange={(e) => setShortName(e.target.value)}
-            maxLength={2}
-            placeholder={effectiveShort ? `留空自动生成：${effectiveShort}` : "两字符，如 OP"}
-            className="w-40 font-mono uppercase"
           />
         </div>
         <div>

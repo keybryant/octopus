@@ -15,6 +15,7 @@ import {
   PROJECTS,
   REQUIREMENTS,
 } from "./lib/datasource"
+import { deriveShortName } from "./lib/short-name"
 import type {
   Artifact,
   KanbanColumn,
@@ -58,11 +59,11 @@ export default function App() {
 
   const agentClient = useMemo(createDefaultAgentClient, [])
 
-  const handleCreateProject = (data: { name: string; shortName: string; description: string }) => {
+  const handleCreateProject = (data: { name: string; description: string }) => {
     const project: ProjectSummary = {
       id: `project-${Date.now()}`,
       name: data.name,
-      shortName: data.shortName,
+      shortName: deriveShortName(data.name),
       description: data.description || "暂无描述",
       iteration: "未排期",
       dueDate: "-",
