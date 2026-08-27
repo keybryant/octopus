@@ -138,10 +138,10 @@ export default function UsersView() {
       )}
 
       <div className="overflow-hidden rounded-xl border border-border bg-surface">
-        <div className="flex items-center gap-3 border-b border-border bg-surface-hover/50 px-4 py-2.5 text-xs text-text-faint">
-          <span className="flex-1">用户</span>
-          <span className="w-16">角色</span>
-          <span className="w-28" />
+        <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border bg-surface-hover/50 px-4 py-2.5 text-xs text-text-faint">
+          <span>用户</span>
+          <span className="w-14 text-left">角色</span>
+          <span className="w-[190px] text-right">操作</span>
         </div>
         {users.length === 0 && (
           <div className="px-4 py-6 text-center text-xs text-text-faint">暂无用户</div>
@@ -149,18 +149,18 @@ export default function UsersView() {
         {users.map((u) => (
           <div
             key={u.id}
-            className="flex items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-surface-hover/30"
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-surface-hover/30"
           >
-            <span className="flex-1">
+            <span className="min-w-0 truncate">
               <span className={u.disabled ? "text-text-faint line-through" : ""}>{u.username}</span>
               {u.disabled && <span className="ml-2 text-xs text-danger">已禁用</span>}
             </span>
-            <span className="w-16">
+            <span className="w-14 text-left">
               {u.role === "admin"
                 ? <Badge tone="warn">管理员</Badge>
                 : <Badge tone="neutral">用户</Badge>}
             </span>
-            <span className="flex w-28 items-center justify-end gap-1.5">
+            <span className="flex w-[190px] items-center justify-end gap-1.5">
               <Button size="sm" variant="ghost" onClick={() => openReset(u)}>重置密码</Button>
               <Button size="sm" variant="ghost" onClick={() => onToggleDisabled(u)}>
                 {u.disabled ? "启用" : "禁用"}
