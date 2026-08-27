@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { KANBAN_COLUMNS, PROJECTS, QUICK_PROMPTS, currentProject } from "./datasource"
+import { PROJECTS, QUICK_PROMPTS, currentProject } from "./datasource"
 
 describe("datasource", () => {
   it("current project is Octopus Platform with v5 metrics", () => {
@@ -16,11 +16,6 @@ describe("datasource", () => {
 
   it("has three projects with unique ids and OP first", () => {
     expect(PROJECTS.map((p) => p.id)).toEqual(["octopus-platform", "merchant-portal", "data-core"])
-  })
-
-  it("kanban covers four columns in order", () => {
-    expect(KANBAN_COLUMNS.map((c) => c.key)).toEqual(["todo", "doing", "review", "done"])
-    expect(KANBAN_COLUMNS.flatMap((c) => c.tasks).some((t) => t.agentRun)).toBe(true)
   })
 
   it("quick prompts match v5 chips", () => {

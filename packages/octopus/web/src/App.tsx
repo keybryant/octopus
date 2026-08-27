@@ -1,26 +1,22 @@
 import { useEffect, useMemo, useState } from "react"
 import { Button, ThemeProvider } from "octopus-ui"
 import { FolderOpen, Plus } from "octopus-ui"
+import { OCTOPUS_DECOMPOSE_EVENT, type DecomposePayload, type DecomposePayloadHolder } from "octopus-ui"
 import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects, updateProject, type ProjectRecordView, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
-import { KanbanDrawer } from "./components/KanbanDrawer"
 import { ModulePaneModal } from "./components/ModulePaneModal"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { ProjectSettingsModal, type SettingsProject } from "./components/ProjectSettingsModal"
 import { ProjectStrip } from "./components/ProjectStrip"
 import { RequirementsDrawer } from "./components/RequirementsDrawer"
+import { TasksDrawer } from "./components/TasksDrawer"
 import { TopBar } from "./components/TopBar"
-import {
-  createDefaultAgentClient,
-  KANBAN_COLUMNS,
-} from "./lib/datasource"
+import { createDefaultAgentClient } from "./lib/datasource"
 import { fetchMe, logout, redirectToLogin, type MeResponse } from "./lib/auth"
 import { deriveShortName } from "./lib/short-name"
 import type {
   Artifact,
-  KanbanColumn,
-  KanbanTask,
   ProjectSummary,
 } from "./lib/types"
 
@@ -74,6 +70,22 @@ export default function App() {
     [modules],
   )
 
+  // 任务插件入口：由 decompose 事件打开任务抽屉
+  const tasksEntry = useMemo(
+    () => modules.find((m) => m.id === "tasks")?.entry,
+    [modules],
+  )
+
+  useEffect(() => {
+    const onDecompose = (event: Event) => {
+      const detail = (event as CustomEvent<DecomposePayload>).detail
+      ;(window as DecomposePayloadHolder).__octopusDecomposePayload = detail
+      setDrawer("tasks")
+    }
+    window.addEventListener(OCTOPUS_DECOMPOSE_EVENT, onDecompose)
+    return () => window.removeEventListener(OCTOPUS_DECOMPOSE_EVENT, onDecompose)
+  }, [])
+
   useEffect(() => {
     // 需求插件通过全局变量读取当前项目编码（插件页面无宿主 query 可用）
     ;(window as { __octopusProjectId?: string }).__octopusProjectId = current?.id
@@ -90,8 +102,6 @@ export default function App() {
   }, [])
 
   // ── 看板 ──
-  const [columns, setColumns] = useState<KanbanColumn[]>(KANBAN_COLUMNS)
-
   const [drawer, setDrawer] = useState<DrawerKind>(null)
   const [railCollapsed, setRailCollapsed] = useState(false)
   const [newProjectOpen, setNewProjectOpen] = useState(false)
@@ -152,12 +162,6 @@ export default function App() {
     return true
   }
 
-  const handleCreateTask = (task: KanbanTask) => {
-    setColumns((prev) =>
-      prev.map((c) => (c.key === task.column ? { ...c, tasks: [task, ...c.tasks] } : c)),
-    )
-  }
-
   if (me === null) return null // 未完成身份检查前不渲染任何受保护内容
 
   return (
@@ -192,11 +196,10 @@ export default function App() {
               />
             </div>
 
-            <KanbanDrawer
+            <TasksDrawer
               open={drawer === "tasks"}
               onClose={() => setDrawer(null)}
-              columns={columns}
-              onCreateTask={handleCreateTask}
+              entry={tasksEntry}
             />
             <RequirementsDrawer
               open={drawer === "reqs"}

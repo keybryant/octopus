@@ -2,7 +2,6 @@
 import type {
   AgentClient,
   Artifact,
-  KanbanColumn,
   ProjectSummary,
 } from "./types"
 
@@ -117,54 +116,6 @@ export const INITIAL_ARTIFACTS: Artifact[] = [
     kind: "commit",
     title: "fix: token cache TTL",
     subtitle: "auth/optimize 分支 · 待 CI 通过",
-  },
-]
-
-const KANBAN_TASKS = [
-  // todo
-  { id: "TASK-2852", title: "导出报表支持 CSV 格式", column: "todo", badge: { label: "P1", tone: "orange" }, dueLabel: "10-29", assignee: "LW" },
-  { id: "TASK-2853", title: "审计日志查询接口分页优化", column: "todo", dueLabel: "10-30", assignee: "WQ" },
-  // doing
-  { id: "TASK-2841", title: "认证模块 OAuth 2.0 重构", column: "doing", badge: { label: "进行中", tone: "blue" }, progressPct: 65, assignee: "ZS" },
-  { id: "TASK-2850", title: "React 19 升级兼容性验证", column: "doing", badge: { label: "Agent 执行中", tone: "green" }, progressLabel: "回归测试中", agentRun: true, assignee: "OCTO" },
-  { id: "TASK-2856", title: "权限缓存失效策略联调修复", column: "doing", badge: { label: "已逾期", tone: "orange" }, progressPct: 20, assignee: "WQ" },
-] as const
-
-const KANBAN_REVIEW = [
-  { id: "TASK-2847", title: "权限缓存失效策略 PR #882", column: "review", diffStat: "+214 −38", assignee: "ZS" },
-  { id: "TASK-2848", title: "消息中心聚合拉取策略", column: "review", diffStat: "+86 −12", assignee: "LY" },
-] as const
-
-const KANBAN_DONE = [
-  { id: "TASK-2838", title: "数据库索引重建与慢查询治理", column: "done", dueLabel: "昨天", assignee: "LW" },
-  { id: "TASK-2836", title: "对象存储迁移至新 Bucket", column: "done", dueLabel: "前天", assignee: "ZS" },
-  { id: "TASK-2833", title: "网关访问日志采样率调整", column: "done", dueLabel: "本周", assignee: "CC" },
-] as const
-
-export const KANBAN_COLUMNS: KanbanColumn[] = [
-  {
-    key: "todo",
-    label: "待处理",
-    dotColor: "#5C6577",
-    tasks: KANBAN_TASKS.filter((t) => t.column === "todo").map((t) => ({ ...t })),
-  },
-  {
-    key: "doing",
-    label: "进行中",
-    dotColor: "#60A5FA",
-    tasks: KANBAN_TASKS.filter((t) => t.column === "doing").map((t) => ({ ...t })),
-  },
-  {
-    key: "review",
-    label: "评审中",
-    dotColor: "#A78BFA",
-    tasks: KANBAN_REVIEW.map((t) => ({ ...t })),
-  },
-  {
-    key: "done",
-    label: "已完成",
-    dotColor: "#34D399",
-    tasks: KANBAN_DONE.map((t) => ({ ...t, dimmed: true })),
   },
 ]
 

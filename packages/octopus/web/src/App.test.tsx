@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { OCTOPUS_DECOMPOSE_EVENT } from "octopus-ui"
 import App from "./App"
 import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects, updateProject } from "./api"
 import { fetchMe, redirectToLogin } from "./lib/auth"
@@ -272,16 +273,23 @@ describe("App creation flows", () => {
     expect(screen.getAllByText("Merchant Portal").length).toBeGreaterThan(0)
   })
 
-  it("creates a task via kanban drawer and shows it in 待处理", async () => {
+  it("decompose bridge event opens tasks drawer with payload", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     await renderApp()
-    await user.click(await screen.findByRole("button", { name: /任务看板/ }))
-    await user.click(await screen.findByRole("button", { name: /新建任务/ }))
-    fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {
-      target: { value: "看板里冒出来的新任务" },
-    })
-    await user.click(screen.getByRole("button", { name: "创建任务" }))
-    expect(await screen.findByText("看板里冒出来的新任务")).toBeInTheDocument()
+    // 先收载荷进内存，再派发事件
+    window.dispatchEvent(
+      new CustomEvent(OCTOPUS_DECOMPOSE_EVENT, {
+        detail: { requirementId: "REQ-100", title: "OAuth 2.0 重构", priority: "P0" },
+      }),
+    )
+    await waitFor(() =>
+      expect((window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload).toMatchObject({
+        requirementId: "REQ-100",
+      }),
+    )
+    expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
+    const holder = window as unknown as { __octopusDecomposePayload?: unknown }
+    delete holder.__octopusDecomposePayload
   })
 })
