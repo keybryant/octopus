@@ -3,7 +3,8 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { createProject, deleteProject, fetchConfig, fetchProjects, updateProject } from "./api"
+import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects, updateProject } from "./api"
+import { fetchMe, redirectToLogin } from "./lib/auth"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
@@ -14,6 +15,7 @@ vi.mock("./api", () => ({
   deleteProject: vi.fn().mockResolvedValue(true),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
+const mockedFetchModules = vi.mocked(fetchModules)
 const mockedFetchProjects = vi.mocked(fetchProjects)
 const mockedCreateProject = vi.mocked(createProject)
 const mockedUpdateProject = vi.mocked(updateProject)
@@ -29,6 +31,24 @@ const apiProject = {
   createdAt: "2026-08-26T00:00:00.000Z",
 }
 
+vi.mock("./lib/auth", () => ({
+  fetchMe: vi.fn().mockResolvedValue({
+    user: { id: "1", username: "boss", role: "admin" },
+    canLogout: true,
+  }),
+  redirectToLogin: vi.fn(),
+  logout: vi.fn(),
+}))
+const mockedFetchMe = vi.mocked(fetchMe)
+const mockedRedirectToLogin = vi.mocked(redirectToLogin)
+
+// App 在 fetchMe 落定前不渲染任何受保护内容，故先等待身份检查完成
+async function renderApp() {
+  const utils = render(<App />)
+  await waitFor(() => expect(mockedFetchMe).toHaveBeenCalled())
+  return utils
+}
+
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -36,19 +56,38 @@ describe("App (v5 agent homepage)", () => {
   })
 
   it("renders empty project state when no projects", async () => {
-    render(<App />)
+    await renderApp()
     // 无数据 → 空列表：切换器显示无项目，主区空状态，聊天/看板等全部隐藏
     expect(screen.getByText("无项目")).toBeInTheDocument()
     expect(screen.getByText("暂无项目")).toBeInTheDocument()
     expect(screen.queryByText(/当前上下文/)).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: /任务看板/ })).not.toBeInTheDocument()
     expect(mockedFetchConfig).toHaveBeenCalled()
+    expect(mockedFetchMe).toHaveBeenCalled()
+  })
+
+  it("redirects to login and renders nothing when unauthorized", async () => {
+    mockedFetchMe.mockRejectedValueOnce(new Error("unauthorized"))
+    const { container } = await renderApp()
+    await waitFor(() => expect(mockedRedirectToLogin).toHaveBeenCalled())
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it("admin opens 用户管理 from 设置 → 全局", async () => {
+    const user = userEvent.setup()
+    mockedFetchModules.mockResolvedValueOnce([
+      { id: "users-view", title: "用户管理", entry: "/octopus/users-view/assets/index.js" },
+    ])
+    await renderApp()
+    await user.click(screen.getByLabelText("设置"))
+    await user.click(await screen.findByText("用户管理"))
+    expect(await screen.findByRole("heading", { name: "用户管理" })).toBeInTheDocument()
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(await screen.findByRole("button", { name: /任务看板/ }))
     expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
     fireEvent.keyDown(document, { key: "Escape" })
@@ -60,7 +99,7 @@ describe("App (v5 agent homepage)", () => {
   it("chat send round-trip shows assistant cards and artifacts rail", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     const box = await screen.findByPlaceholderText(/给 Octo Agent 下指令/)
     await user.type(box, "列出优先事项")
     fireEvent.keyDown(box, { key: "Enter" })
@@ -71,7 +110,7 @@ describe("App (v5 agent homepage)", () => {
   it("artifacts rail collapses and restores", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(await screen.findByTitle("收起"))
     expect(screen.queryByText("本会话产出")).not.toBeInTheDocument()
     await user.click(screen.getByTitle("展开产出面板"))
@@ -100,7 +139,7 @@ describe("App (v5 agent homepage)", () => {
       },
     ])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     // 默认选中最新项目 p-b
     await waitFor(() => expect(screen.getAllByText("Beta").length).toBeGreaterThan(0))
     // 切换到 Alpha
@@ -124,7 +163,7 @@ describe("App (v5 agent homepage)", () => {
         createdAt: "2026-08-26T00:00:00.000Z",
       },
     ])
-    render(<App />)
+    await renderApp()
     expect(await screen.findAllByText("API Project").then((els) => els.length)).toBeGreaterThan(0)
   })
 
@@ -140,7 +179,7 @@ describe("App (v5 agent homepage)", () => {
         createdAt: "2026-08-26T00:00:00.000Z",
       },
     ])
-    render(<App />)
+    await renderApp()
     const user = userEvent.setup()
     await user.click(await screen.findByTitle("设置"))
     await user.click(screen.getByText("项目设置"))
@@ -176,7 +215,7 @@ describe("App (v5 agent homepage)", () => {
         createdAt: "2026-08-26T00:00:00.000Z",
       },
     ])
-    render(<App />)
+    await renderApp()
     const user = userEvent.setup()
     await user.click(await screen.findByTitle("设置"))
     await user.click(screen.getByText("项目设置"))
@@ -204,7 +243,7 @@ describe("App creation flows", () => {
       createdAt: "2026-08-27T00:00:00.000Z",
     })
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByTestId("project-switcher"))
     await user.click(screen.getByRole("menuitem", { name: "新建项目" }))
     fireEvent.change(screen.getByPlaceholderText(/例如：Octopus Platform/), {
@@ -223,7 +262,7 @@ describe("App creation flows", () => {
   it("creates a requirement via strip button and shows it in drawer", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(await screen.findByRole("button", { name: /新建需求/ }))
     fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
       target: { value: "品牌全新的需求条目" },
@@ -237,7 +276,7 @@ describe("App creation flows", () => {
   it("creates a task via kanban drawer and shows it in 待处理", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(await screen.findByRole("button", { name: /任务看板/ }))
     await user.click(await screen.findByRole("button", { name: /新建任务/ }))
     fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {

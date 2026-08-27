@@ -18,6 +18,8 @@ const MIME_TYPES: Record<string, string> = {
 export interface HttpRequest {
   method?: string
   url?: string
+  headers: Record<string, string | string[] | undefined>
+  socket?: { remoteAddress?: string }
 }
 
 export interface HttpResponse {

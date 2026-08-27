@@ -4,12 +4,19 @@ import { describe, expect, it, vi } from "vitest"
 import { PROJECTS } from "../lib/datasource"
 import { TopBar } from "./TopBar"
 
+const me = {
+  user: { id: "1", username: "boss", role: "admin" as const },
+  canLogout: true,
+}
+
 const props = {
   projects: PROJECTS,
   currentProjectId: "octopus-platform",
   onSwitchProject: vi.fn(),
   onOpenNewProject: vi.fn(),
   onOpenProjectSettings: vi.fn(),
+  me,
+  onLogout: vi.fn(),
 }
 
 describe("TopBar", () => {
@@ -53,5 +60,39 @@ describe("TopBar", () => {
     expect(screen.queryByText("项目设置")).not.toBeInTheDocument()
     expect(screen.queryByText("成员与权限")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "进入主界面" })).toBeInTheDocument()
+  })
+
+  it("shows 用户管理 under 全局 only when onOpenUserManagement provided", async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    render(<TopBar {...props} onOpenUserManagement={onOpen} />)
+    await user.click(screen.getByLabelText("设置"))
+    await user.click(await screen.findByText("用户管理"))
+    expect(onOpen).toHaveBeenCalled()
+  })
+
+  it("hides 用户管理 when onOpenUserManagement is not provided", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} />)
+    await user.click(screen.getByLabelText("设置"))
+    expect(screen.queryByText("用户管理")).not.toBeInTheDocument()
+  })
+
+  it("user menu shows username and role, logout calls onLogout when canLogout", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} />)
+    expect(screen.getByLabelText("用户菜单")).toHaveTextContent("BO")
+    await user.click(screen.getByLabelText("用户菜单"))
+    expect(screen.getByText("boss")).toBeInTheDocument()
+    expect(screen.getByText("管理员")).toBeInTheDocument()
+    await user.click(screen.getByText("退出"))
+    expect(props.onLogout).toHaveBeenCalled()
+  })
+
+  it("hides logout item when canLogout is false", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} me={{ ...me, canLogout: false }} />)
+    await user.click(screen.getByLabelText("用户菜单"))
+    expect(screen.queryByText("退出")).not.toBeInTheDocument()
   })
 })

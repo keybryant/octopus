@@ -5,8 +5,8 @@
   "scripts": {
     "build": "pnpm -r run build",
     "test": "pnpm -r run test",
-    "dev": "pnpm install && pnpm build && pnpm dsh plugin --profile web add ./packages/octopus ./packages/octopus-quickstart ./packages/octopus-projects --config.auto-install-peers=false && pnpm dsh web",
-    "dev:noopen": "pnpm install && pnpm build && pnpm dsh plugin --profile web add ./packages/octopus ./packages/octopus-quickstart ./packages/octopus-projects --config.auto-install-peers=false && pnpm dsh web --no-open"
+    "dev": "pnpm install && pnpm build && pnpm dsh plugin --profile web add ./packages/octopus ./packages/octopus-users ./packages/octopus-auth ./packages/octopus-users-view ./packages/octopus-quickstart ./packages/octopus-projects --config.auto-install-peers=false && pnpm dsh web",
+    "dev:noopen": "pnpm install && pnpm build && pnpm dsh plugin --profile web add ./packages/octopus ./packages/octopus-users ./packages/octopus-auth ./packages/octopus-users-view ./packages/octopus-quickstart ./packages/octopus-projects --config.auto-install-peers=false && pnpm dsh web --no-open"
   },
   "devDependencies": {
     "@deepseek-ai/dsh": "^0.1.1-rc.2"

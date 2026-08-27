@@ -4,6 +4,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { apply, createIndexHandler, resolveConfig } from "./index.js"
 import { WORKBENCH_VENDOR_PREFIX } from "./vite-plugin.js"
+import { httpError } from "octopus-auth"
 
 function mockContext() {
   const disposers: (() => void)[] = []
@@ -13,15 +14,20 @@ function mockContext() {
     return dispose
   })
   const webServer = { register }
+  const auth = {
+    requireAuth: vi.fn(async () => ({ sessionId: "test", user: { id: "u1", username: "tester", role: "admin" }, expiresAt: Number.POSITIVE_INFINITY })),
+    requireAdmin: vi.fn(),
+  }
   let disposeAll: (() => void) | undefined
   const ctx: any = {
     provide: vi.fn(),
     webServer,
+    auth,
     effect: vi.fn((factory: () => () => void) => {
       disposeAll = factory()
     }),
   }
-  return { ctx, webServer, disposers, getDisposeAll: () => disposeAll }
+  return { ctx, webServer, auth, disposers, getDisposeAll: () => disposeAll }
 }
 
 function createRes() {
@@ -60,7 +66,7 @@ describe("createIndexHandler", () => {
     writeFileSync(join(dir, "index.html"), "<html>ok</html>")
     const handler = createIndexHandler(dir)
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench" }, res)
+    await handler({ method: "GET", url: "/workbench", headers: {} }, res)
     expect(res.calls[0].status).toBe(200)
     expect(res.calls[0].headers["content-type"]).toBe("text/html; charset=utf-8")
     expect(res.calls[0].body).toBe("<html>ok</html>")
@@ -69,7 +75,7 @@ describe("createIndexHandler", () => {
   it("returns 503 with build hint when web-dist is missing", async () => {
     const handler = createIndexHandler(join(dir, "missing"))
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench" }, res)
+    await handler({ method: "GET", url: "/workbench", headers: {} }, res)
     expect(res.calls[0].status).toBe(503)
     expect(res.calls[0].body).toContain("web-dist")
   })
@@ -78,10 +84,10 @@ describe("createIndexHandler", () => {
     writeFileSync(join(dir, "index.html"), "<html>v1</html>")
     const handler = createIndexHandler(dir)
     const res1 = createRes()
-    await handler({ method: "GET" }, res1)
+    await handler({ method: "GET", headers: {} }, res1)
     writeFileSync(join(dir, "index.html"), "<html>v2</html>")
     const res2 = createRes()
-    await handler({ method: "GET" }, res2)
+    await handler({ method: "GET", headers: {} }, res2)
     expect(res2.calls[0].body).toBe("<html>v1</html>")
   })
 })
@@ -123,12 +129,36 @@ describe("apply", () => {
     registry.register({ id: "demo", title: "Demo", entry: "/demo.js" })
     const routes = registeredRoutes(webServer)
     const res = createRes()
-    await routes.get("exact /api/octopus/config")!.handler({ method: "GET", url: "/api/octopus/config" }, res)
+    await routes.get("exact /api/octopus/config")!.handler({ method: "GET", url: "/api/octopus/config", headers: {} }, res)
     expect(res.calls[0].status).toBe(200)
     expect(JSON.parse(res.calls[0].body)).toEqual({ title: "我的工作台", greeting: "欢迎" })
-    await routes.get("exact /api/octopus/modules")!.handler({ method: "GET", url: "/api/octopus/modules" }, res)
+    await routes.get("exact /api/octopus/modules")!.handler({ method: "GET", url: "/api/octopus/modules", headers: {} }, res)
     expect(res.calls[1].status).toBe(200)
     expect(JSON.parse(res.calls[1].body).map((m: any) => m.id)).toEqual(["demo"])
+  })
+
+  it("modules/config return 401 JSON when not logged in", async () => {
+    const { ctx, webServer, auth } = mockContext()
+    auth.requireAuth.mockRejectedValueOnce(httpError(401, "unauthorized", "未登录"))
+    apply(ctx, {})
+    const routes = registeredRoutes(webServer)
+    const res = createRes()
+    await routes.get("exact /api/octopus/modules")!.handler({ method: "GET", url: "/api/octopus/modules", headers: {} }, res)
+    expect(res.calls[0].status).toBe(401)
+    expect(JSON.parse(res.calls[0].body).error).toBe("unauthorized")
+  })
+
+  it("modules filters admin cards by role", async () => {
+    const { ctx, webServer, auth } = mockContext()
+    auth.requireAuth.mockResolvedValue({ sessionId: "t", user: { id: "u", username: "u", role: "user" }, expiresAt: 1 })
+    apply(ctx, {})
+    const registry = ctx.provide.mock.calls[0][1]
+    registry.register({ id: "a", title: "A", entry: "/a.js" })
+    registry.register({ id: "b", title: "B", entry: "/b.js", access: "admin" })
+    const routes = registeredRoutes(webServer)
+    const res = createRes()
+    await routes.get("exact /api/octopus/modules")!.handler({ method: "GET", url: "/api/octopus/modules", headers: {} }, res)
+    expect(JSON.parse(res.calls[0].body).map((m: any) => m.id)).toEqual(["a"])
   })
 
   it("shares one cached index handler between /workbench and /workbench/", () => {

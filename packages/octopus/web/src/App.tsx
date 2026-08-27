@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { Button, ThemeProvider } from "octopus-ui"
 import { FolderOpen, Plus } from "octopus-ui"
-import { createProject, deleteProject, fetchConfig, fetchProjects, updateProject, type ProjectRecordView, type WorkbenchConfig } from "./api"
+import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects, updateProject, type ProjectRecordView, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
+import { ModulePaneModal } from "./components/ModulePaneModal"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { NewRequirementModal } from "./components/NewRequirementModal"
 import { ProjectSettingsModal, type SettingsProject } from "./components/ProjectSettingsModal"
@@ -16,6 +17,7 @@ import {
   KANBAN_COLUMNS,
   REQUIREMENTS,
 } from "./lib/datasource"
+import { fetchMe, logout, redirectToLogin, type MeResponse } from "./lib/auth"
 import { deriveShortName } from "./lib/short-name"
 import type {
   Artifact,
@@ -55,6 +57,20 @@ export default function App() {
   useEffect(() => {
     void fetchConfig().then(setConfig)
   }, [])
+
+  const [me, setMe] = useState<MeResponse | null>(null)
+  useEffect(() => {
+    fetchMe()
+      .then(setMe)
+      .catch(() => redirectToLogin())
+  }, [])
+
+  const [modules, setModules] = useState<WorkbenchModuleInfo[]>([])
+  useEffect(() => {
+    void fetchModules().then(setModules)
+  }, [])
+  const usersViewEntry = modules.find((m) => m.id === "users-view")?.entry
+  const [userPaneOpen, setUserPaneOpen] = useState(false)
 
   // ── 项目域状态（插件 API 可用时接管；否则 mock 数据源 + 本会话新增）──
   const [projects, setProjects] = useState<ProjectSummary[]>([])
@@ -155,6 +171,8 @@ export default function App() {
     )
   }
 
+  if (me === null) return null // 未完成身份检查前不渲染任何受保护内容
+
   return (
     <ThemeProvider defaultMode="dark">
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -164,6 +182,9 @@ export default function App() {
           onSwitchProject={setProjectId}
           onOpenNewProject={() => setNewProjectOpen(true)}
           onOpenProjectSettings={() => setSettingsOpen(true)}
+          me={me}
+          onLogout={() => void logout()}
+          onOpenUserManagement={me.user.role === "admin" ? () => setUserPaneOpen(true) : undefined}
         />
 
         {current ? (
@@ -225,6 +246,13 @@ export default function App() {
             </Button>
           </div>
         )}
+
+        <ModulePaneModal
+          open={userPaneOpen}
+          title="用户管理"
+          entry={usersViewEntry}
+          onClose={() => setUserPaneOpen(false)}
+        />
 
         <NewProjectModal
           open={newProjectOpen}

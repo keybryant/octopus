@@ -29,11 +29,14 @@
     "octopus-ui": "workspace:*"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1"
+    "@deepseek-ai/cordis": "^4.0.1",
+    "octopus-auth": "^0.1.0"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@tailwindcss/vite": "^4.0.0",
+    "octopus-auth": "file:../octopus-auth",
+    "octopus-users": "file:../octopus-users",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.0",
     "@testing-library/react": "^16.1.0",
