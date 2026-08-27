@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { OCTOPUS_DECOMPOSE_EVENT, type DecomposePayload } from "octopus-ui"
 import RequirementsModule from "./index"
 import { currentProjectId } from "./api"
 
@@ -154,5 +155,26 @@ describe("RequirementsModule", () => {
       expect.objectContaining({ method: "DELETE" }),
     ))
     await waitFor(() => expect(screen.queryByText("OAuth 2.0 重构")).not.toBeInTheDocument())
+  })
+})
+
+describe("RequirementsModule 拆解入口", () => {
+  it("点击行内拆解按钮派发 decompose 事件并携带需求上下文", async () => {
+    const listener = vi.fn()
+    window.addEventListener(OCTOPUS_DECOMPOSE_EVENT, listener as EventListener)
+    vi.stubGlobal("fetch", mockList())
+    render(<RequirementsModule />)
+    await screen.findByText("OAuth 2.0 重构")
+
+    await userEvent.click(screen.getByRole("button", { name: "拆解任务 REQ-100" }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    const detail = (listener.mock.calls[0][0] as CustomEvent<DecomposePayload>).detail
+    expect(detail).toMatchObject({
+      requirementId: "REQ-100",
+      title: "OAuth 2.0 重构",
+      priority: "P0",
+    })
+    window.removeEventListener(OCTOPUS_DECOMPOSE_EVENT, listener as EventListener)
   })
 })

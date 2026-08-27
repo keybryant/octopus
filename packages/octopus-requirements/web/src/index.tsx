@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button, Spinner } from "octopus-ui"
 import { Plus } from "octopus-ui"
+import { OCTOPUS_DECOMPOSE_EVENT, type DecomposePayload } from "octopus-ui"
 import { createRequirement, listRequirements, removeRequirement, updateRequirement } from "./api"
 import { NewRequirementModal, type NewRequirementInput } from "./components/NewRequirementModal"
 import { RequirementsTable } from "./components/RequirementsTable"
@@ -121,6 +122,16 @@ export default function RequirementsModule() {
     }
   }
 
+  const handleDecompose = (record: RequirementRecord) => {
+    const detail: DecomposePayload = {
+      requirementId: record.id,
+      title: record.title,
+      description: record.description || undefined,
+      priority: record.priority,
+    }
+    window.dispatchEvent(new CustomEvent<DecomposePayload>(OCTOPUS_DECOMPOSE_EVENT, { detail }))
+  }
+
   const handleDelete = async (id: string) => {
     if (!window.confirm(`确定删除需求 ${id}？`)) return
     setBusyIds((prev) => new Set(prev).add(id))
@@ -192,6 +203,7 @@ export default function RequirementsModule() {
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
           onEdit={openEdit}
+          onDecompose={handleDecompose}
           busyIds={busyIds}
         />
       )}

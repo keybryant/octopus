@@ -1,5 +1,5 @@
 import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "octopus-ui"
-import { Pencil, Trash2 } from "octopus-ui"
+import { Layers, Pencil, Trash2 } from "octopus-ui"
 import { STATUS_META, TRANSITIONS } from "../status"
 import type { Priority, RequirementRecord, RequirementStatus } from "../types"
 
@@ -14,10 +14,11 @@ export interface RequirementsTableProps {
   onStatusChange: (id: string, status: RequirementStatus) => Promise<void> | void
   onDelete: (id: string) => Promise<void> | void
   onEdit: (record: RequirementRecord) => void
+  onDecompose: (record: RequirementRecord) => void
   busyIds: ReadonlySet<string>
 }
 
-export function RequirementsTable({ requirements, onStatusChange, onDelete, onEdit, busyIds }: RequirementsTableProps) {
+export function RequirementsTable({ requirements, onStatusChange, onDelete, onEdit, onDecompose, busyIds }: RequirementsTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-[13px]">
@@ -75,6 +76,16 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, onEd
                   {new Date(r.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3.5 text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    aria-label={`拆解任务 ${r.id}`}
+                    title={`从 ${r.id} 拆解任务`}
+                    onClick={() => onDecompose(r)}
+                  >
+                    <Layers className="h-3.5 w-3.5" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"
