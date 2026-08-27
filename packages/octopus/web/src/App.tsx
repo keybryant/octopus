@@ -15,6 +15,7 @@ import {
   PROJECTS,
   REQUIREMENTS,
 } from "./lib/datasource"
+import { fetchMe, logout, redirectToLogin, type MeResponse } from "./lib/auth"
 import { deriveShortName } from "./lib/short-name"
 import type {
   Artifact,
@@ -38,6 +39,13 @@ export default function App() {
   const [config, setConfig] = useState<WorkbenchConfig | null>(null)
   useEffect(() => {
     void fetchConfig().then(setConfig)
+  }, [])
+
+  const [me, setMe] = useState<MeResponse | null>(null)
+  useEffect(() => {
+    fetchMe()
+      .then(setMe)
+      .catch(() => redirectToLogin())
   }, [])
 
   // ── 项目域状态（mock 数据源 + 本会话新增）──
@@ -95,6 +103,8 @@ export default function App() {
     )
   }
 
+  if (me === null) return null // 未完成身份检查前不渲染任何受保护内容
+
   return (
     <ThemeProvider defaultMode="dark">
       <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -103,6 +113,8 @@ export default function App() {
           currentProjectId={projectId}
           onSwitchProject={setProjectId}
           onOpenNewProject={() => setNewProjectOpen(true)}
+          me={me}
+          onLogout={() => void logout()}
         />
 
         <ProjectStrip

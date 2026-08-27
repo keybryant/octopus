@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
 import { fetchConfig } from "./api"
+import { fetchMe, redirectToLogin } from "./lib/auth"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
@@ -11,23 +12,49 @@ vi.mock("./api", () => ({
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
 
+vi.mock("./lib/auth", () => ({
+  fetchMe: vi.fn().mockResolvedValue({
+    user: { id: "1", username: "boss", role: "admin" },
+    canLogout: true,
+  }),
+  redirectToLogin: vi.fn(),
+  logout: vi.fn(),
+}))
+const mockedFetchMe = vi.mocked(fetchMe)
+const mockedRedirectToLogin = vi.mocked(redirectToLogin)
+
+// App 在 fetchMe 落定前不渲染任何受保护内容，故先等待身份检查完成
+async function renderApp() {
+  const utils = render(<App />)
+  await waitFor(() => expect(mockedFetchMe).toHaveBeenCalled())
+  return utils
+}
+
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
     vi.clearAllMocks()
   })
 
   it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
-    render(<App />)
+    await renderApp()
     expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0) // 切换器 + strip
     await waitFor(() =>
       expect(screen.getByText(/当前上下文：Octopus Platform · 迭代 4.2/)).toBeInTheDocument(),
     )
     expect(mockedFetchConfig).toHaveBeenCalled()
+    expect(mockedFetchMe).toHaveBeenCalled()
+  })
+
+  it("redirects to login and renders nothing when unauthorized", async () => {
+    mockedFetchMe.mockRejectedValueOnce(new Error("unauthorized"))
+    const { container } = await renderApp()
+    await waitFor(() => expect(mockedRedirectToLogin).toHaveBeenCalled())
+    expect(container).toBeEmptyDOMElement()
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByRole("button", { name: /任务看板/ }))
     expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
     fireEvent.keyDown(document, { key: "Escape" })
@@ -38,7 +65,7 @@ describe("App (v5 agent homepage)", () => {
 
   it("chat send round-trip shows assistant cards and artifacts rail", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
     await user.type(box, "列出优先事项")
     fireEvent.keyDown(box, { key: "Enter" })
@@ -48,7 +75,7 @@ describe("App (v5 agent homepage)", () => {
 
   it("artifacts rail collapses and restores", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByTitle("收起"))
     expect(screen.queryByText("本会话产出")).not.toBeInTheDocument()
     await user.click(screen.getByTitle("展开产出面板"))
@@ -57,7 +84,7 @@ describe("App (v5 agent homepage)", () => {
 
   it("project switcher swaps strip metrics", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByTestId("project-switcher"))
     await user.click(screen.getByText("Merchant Portal"))
     // 切换后指标随项目变化
@@ -72,7 +99,7 @@ describe("App creation flows", () => {
 
   it("creates a project via switcher menu and switches to it", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByTestId("project-switcher"))
     await user.click(screen.getByText("新建项目"))
     fireEvent.change(screen.getByPlaceholderText(/例如：Octopus Platform/), {
@@ -88,7 +115,7 @@ describe("App creation flows", () => {
 
   it("creates a requirement via strip button and shows it in drawer", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByRole("button", { name: /新建需求/ }))
     fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
       target: { value: "品牌全新的需求条目" },
@@ -101,7 +128,7 @@ describe("App creation flows", () => {
 
   it("creates a task via kanban drawer and shows it in 待处理", async () => {
     const user = userEvent.setup()
-    render(<App />)
+    await renderApp()
     await user.click(screen.getByRole("button", { name: /任务看板/ }))
     await user.click(await screen.findByRole("button", { name: /新建任务/ }))
     fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {
