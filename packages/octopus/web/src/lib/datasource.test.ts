@@ -6,13 +6,11 @@ describe("datasource", () => {
     const p = currentProject()
     expect(p.name).toBe("Octopus Platform")
     expect(p.shortName).toBe("OP")
-    expect(p.iteration).toBe("迭代 4.2 · 第 2 周")
     expect(p.progressPct).toBe(78)
     expect(p.weeklyDone).toBe(28)
     expect(p.weeklyTotal).toBe(40)
     expect(p.activeRequirements).toBe(24)
     expect(p.overdue).toBe(3)
-    expect(p.dueDate).toBe("10-31")
     expect(p.members).toHaveLength(8) // 头像叠前3个 + "+5"
   })
 

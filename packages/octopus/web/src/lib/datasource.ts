@@ -1,4 +1,4 @@
-import { createMockAgentClient } from "./agent-client"
+﻿import { createMockAgentClient } from "./agent-client"
 import type {
   AgentClient,
   Artifact,
@@ -14,8 +14,6 @@ export const PROJECTS: ProjectSummary[] = [
     name: "Octopus Platform",
     shortName: "OP",
     description: "企业级一站式开发协作平台 · 目标 Q4 上线公测",
-    iteration: "迭代 4.2 · 第 2 周",
-    dueDate: "10-31",
     progressPct: 78,
     weeklyDone: 28,
     weeklyTotal: 40,
@@ -37,8 +35,6 @@ export const PROJECTS: ProjectSummary[] = [
     name: "Merchant Portal",
     shortName: "MP",
     description: "商户门户 · 多端一体化经营工具",
-    iteration: "迭代 2.8 · 第 3 周",
-    dueDate: "11-14",
     progressPct: 46,
     weeklyDone: 12,
     weeklyTotal: 30,
@@ -56,8 +52,6 @@ export const PROJECTS: ProjectSummary[] = [
     name: "Data Core",
     shortName: "DC",
     description: "数据中台 · 指标与报表统一服务",
-    iteration: "迭代 1.5 · 第 1 周",
-    dueDate: "12-05",
     progressPct: 21,
     weeklyDone: 5,
     weeklyTotal: 25,

@@ -1,5 +1,4 @@
 ﻿import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -8,20 +7,39 @@
   DropdownMenuTrigger,
 } from "octopus-ui"
 import { Check, ChevronDown, Plus, Search, Settings } from "octopus-ui"
+import type { MeResponse } from "../lib/auth"
 import type { ProjectSummary } from "../lib/types"
 import { OctoLogo } from "./OctoLogo"
 
 export interface TopBarProps {
   projects: ProjectSummary[]
-  currentProjectId: string
+  currentProjectId?: string
   onSwitchProject: (id: string) => void
   onOpenNewProject: () => void
+  onOpenProjectSettings: () => void
+  me: MeResponse
+  onLogout: () => void
+  onOpenUserManagement?: () => void
 }
 
 const iconBtn =
   "p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-surface transition-colors duration-fast"
 
-export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewProject }: TopBarProps) {
+const roleLabel: Record<MeResponse["user"]["role"], string> = {
+  admin: "管理员",
+  user: "普通用户",
+}
+
+export function TopBar({
+  projects,
+  currentProjectId,
+  onSwitchProject,
+  onOpenNewProject,
+  onOpenProjectSettings,
+  me,
+  onLogout,
+  onOpenUserManagement,
+}: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
 
   return (
@@ -37,9 +55,9 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
           className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors duration-fast hover:bg-surface"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border-strong bg-surface-hover font-mono text-[10px] text-muted-foreground">
-            {current.shortName}
+            {current?.shortName ?? "—"}
           </span>
-          <span className="text-sm font-semibold">{current.name}</span>
+          <span className="text-sm font-semibold">{current ? current.name : "无项目"}</span>
           <ChevronDown className="h-3.5 w-3.5 text-text-faint" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[320px]">
@@ -63,7 +81,7 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{p.name}</span>
                   <span className="block truncate text-[11px] text-text-faint">
-                    {p.description.split(" · ")[0]} · {p.iteration.split(" · ")[0]}
+                    {p.description.split(" · ")[0]}
                   </span>
                 </span>
                 {isCurrent && <Check className="h-4 w-4 text-accent" />}
@@ -78,8 +96,6 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Badge tone="success">{current.iteration}</Badge>
-
       <span className="flex-1" />
 
       {/* 设置 */}
@@ -88,15 +104,22 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
           <Settings className="h-[18px] w-[18px]" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[240px]">
-          <DropdownMenuLabel>本项目</DropdownMenuLabel>
-          <DropdownMenuItem>项目设置</DropdownMenuItem>
-          <DropdownMenuItem>成员与权限</DropdownMenuItem>
-          <DropdownMenuItem>仓库与集成</DropdownMenuItem>
-          <DropdownMenuItem>自动化规则</DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {current && (
+            <>
+              <DropdownMenuLabel>本项目</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={onOpenProjectSettings}>项目设置</DropdownMenuItem>
+              <DropdownMenuItem>成员与权限</DropdownMenuItem>
+              <DropdownMenuItem>仓库与集成</DropdownMenuItem>
+              <DropdownMenuItem>自动化规则</DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuLabel>全局</DropdownMenuLabel>
           <DropdownMenuItem>工作区偏好</DropdownMenuItem>
           <DropdownMenuItem>通知设置</DropdownMenuItem>
+          {onOpenUserManagement && (
+            <DropdownMenuItem onSelect={onOpenUserManagement}>用户管理</DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <a href="/" className="block px-4 py-2 text-[13px] text-muted-foreground hover:text-accent">
             进入主界面
@@ -110,17 +133,23 @@ export function TopBar({ projects, currentProjectId, onSwitchProject, onOpenNewP
           aria-label="用户菜单"
           className="flex h-8 w-8 items-center justify-center rounded-full bg-info/15 text-[11px] font-medium text-info transition-shadow hover:ring-2 hover:ring-border-strong"
         >
-          YL
+          {me.user.username.slice(0, 2).toUpperCase()}
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[220px]">
           <div className="border-b border-border px-4 pb-2.5 pt-3">
-            <div className="text-[13px] font-medium">Yuan Liu</div>
-            <div className="text-[11px] text-text-faint">yuan@octopus.dev · 管理员</div>
+            <div className="text-[13px] font-medium">{me.user.username}</div>
+            <div className="text-[11px] text-text-faint">{roleLabel[me.user.role]}</div>
           </div>
           <div className="py-1.5">
             <DropdownMenuItem>个人资料</DropdownMenuItem>
             <DropdownMenuItem>API Token</DropdownMenuItem>
           </div>
+          {me.canLogout && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={onLogout}>退出</DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

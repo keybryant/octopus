@@ -3,7 +3,7 @@ import { Blocks, Columns3 } from "octopus-ui"
 import type { ProjectSummary } from "../lib/types"
 
 export interface ProjectStripProps {
-  summary: ProjectSummary
+  summary: ProjectSummary | null
   onOpenKanban: () => void
   onOpenModules: () => void
 }
@@ -31,10 +31,15 @@ function Metric({ value, suffix, label, warn }: MetricProps) {
 export function ProjectStrip({ summary, onOpenKanban, onOpenModules }: ProjectStripProps) {
   return (
     <section className="flex h-14 shrink-0 items-center gap-6 border-b border-border bg-background px-6">
-      <Metric value={summary.weeklyDone} suffix={`/${summary.weeklyTotal}`} label="本周任务" />
-      <Metric value={summary.activeRequirements} label="活跃需求" />
-      <Metric value={summary.overdue} label="逾期" warn={summary.overdue > 0} />
-      <Metric value={summary.dueDate} label="迭代截止" />
+      {summary ? (
+        <>
+          <Metric value={summary.weeklyDone} suffix={`/${summary.weeklyTotal}`} label="本周任务" />
+          <Metric value={summary.activeRequirements} label="活跃需求" />
+          <Metric value={summary.overdue} label="逾期" warn={summary.overdue > 0} />
+        </>
+      ) : (
+        <span className="text-[12px] text-text-faint">暂无项目，请从顶部切换器新建</span>
+      )}
 
       <span className="flex-1" />
 

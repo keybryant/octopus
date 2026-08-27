@@ -1,3 +1,4 @@
 @import "tailwindcss";
 @import "octopus-ui/tokens.css";
 @source "../../../octopus-ui/src";
+@source "../../../octopus-users-view/web/src";

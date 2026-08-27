@@ -65,7 +65,7 @@ const ACK_SCRIPT: MessageBlock[] = [
     kind: "paragraph",
     segs: [
       { text: "收到。当前上下文是 " },
-      { text: "Octopus Platform · 迭代 4.2", accent: "green" },
+      { text: "Octopus Platform", accent: "green" },
       { text: "，可以让我列出待办、拆解需求或生成周报。" },
     ],
   },

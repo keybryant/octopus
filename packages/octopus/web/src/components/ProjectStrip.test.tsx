@@ -10,7 +10,6 @@ describe("ProjectStrip", () => {
     expect(screen.getByText("28")).toBeInTheDocument()
     expect(screen.getByText("/40")).toBeInTheDocument()
     expect(screen.getByText("24")).toBeInTheDocument()
-    expect(screen.getByText("10-31")).toBeInTheDocument()
     // 已按需求移除：整体进度与成员头像叠
     expect(screen.queryByText("78%")).not.toBeInTheDocument()
     expect(screen.queryByText("+5")).not.toBeInTheDocument()

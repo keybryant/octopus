@@ -66,7 +66,7 @@ export function ChatPane({ agentClient, onArtifactsChange }: ChatPaneProps) {
       {/* 输入区 */}
       <div className="shrink-0 pb-5">
         <div className="mx-auto max-w-[820px] px-6">
-          <Composer quickPrompts={QUICK_PROMPTS} disabled={status === "thinking"} contextLabel="Octopus Platform · 迭代 4.2" onSend={send} />
+          <Composer quickPrompts={QUICK_PROMPTS} disabled={status === "thinking"} contextLabel="Octopus Platform" onSend={send} />
         </div>
       </div>
     </main>

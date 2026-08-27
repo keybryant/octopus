@@ -17,7 +17,6 @@ describe("useChat", () => {
     expect(welcome.role).toBe("assistant")
     expect(welcome.text).toContain("早上好")
     expect(welcome.text).toContain("Octopus Platform")
-    expect(welcome.text).toContain("迭代 4.2")
     expect(result.current.status).toBe("idle")
   })
 
