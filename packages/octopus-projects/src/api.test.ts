@@ -76,7 +76,26 @@ describe("createProjectsHandler", () => {
     expect(view.status).toBe("paused")
     expect(view.workspacePath).toBe(expectedDir)
     expect(view.workspaceId).toBe("ws-My Proj")
+    expect(view.id).toMatch(/^prj[A-Z]{4}$/)
     expect(new Date(view.createdAt).toString()).not.toBe("Invalid Date")
+  })
+
+  it("POST generates unique prj id, retrying on collision", async () => {
+    const seed: Record<string, ProjectRecord> = {
+      "prjCCCC": { name: "occupied", description: "", status: "active", workspacePath: "/p/occupied", workspaceId: "w", createdAt: "2026-01-01T00:00:00.000Z" },
+    }
+    const random = vi
+      .spyOn(Math, "random")
+      .mockReturnValueOnce(0.1).mockReturnValueOnce(0.1).mockReturnValueOnce(0.1).mockReturnValueOnce(0.1)
+      .mockReturnValue(0.9)
+    try {
+      const call = await post({ defaultRoot: rootDir, projects: makeTable(seed), workspaces: makeWorkspaces() }, { name: "unique" })
+      expect(call.status).toBe(201)
+      const view = JSON.parse(call.body).project
+      expect(view.id).toBe("prjXXXX")
+    } finally {
+      random.mockRestore()
+    }
   })
 
   it("POST defaults description/status when omitted", async () => {

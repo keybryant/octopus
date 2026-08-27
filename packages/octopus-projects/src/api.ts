@@ -1,9 +1,18 @@
-import { randomUUID } from "node:crypto"
 import { stat, mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { isValidProjectName, PROJECT_STATUSES, type ProjectRecord, type ProjectStatus } from "./domain.js"
 
 export const BASE_PATH = "/api/octopus-projects"
+
+const ID_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+function randomProjectId(): string {
+  let id = "prj"
+  for (let i = 0; i < 4; i++) {
+    id += ID_LETTERS[Math.floor(Math.random() * ID_LETTERS.length)]
+  }
+  return id
+}
 
 export class ApiError extends Error {
   constructor(readonly status: number, message: string) { super(message) }
@@ -125,7 +134,9 @@ export function createProjectsHandler(deps: ProjectsApiDeps): (req: ApiRequest, 
         } catch (error) {
           throw new ApiError(409, `workspace create failed: ${error instanceof Error ? error.message : String(error)}`)
         }
-        const id = randomUUID()
+        const existingIds = new Set([...deps.projects.entries()].map(([id]) => id))
+        let id = randomProjectId()
+        while (existingIds.has(id)) id = randomProjectId()
         const record: ProjectRecord = { name, description, status, workspacePath: dir, workspaceId, createdAt: new Date().toISOString() }
         await deps.projects.put(id, record)
         sendJson(res, 201, { project: toView(id, record) })
