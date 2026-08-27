@@ -17,7 +17,8 @@ export function apply(ctx: Context) {
         title: "用户管理",
         order: 900,
         entry: "/octopus/users-view/assets/index.js",
-      } as any),
+        access: "admin",
+      }),
       ctx.webServer.register({
         kind: "prefix",
         path: "/octopus/users-view/assets",

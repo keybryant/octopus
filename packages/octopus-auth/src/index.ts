@@ -34,6 +34,10 @@ type Json = Record<string, unknown>
 
 type Handler = (req: IncomingMessage, res: ServerResponse, bodyText?: string) => Promise<void>
 
+interface WebServerLike {
+  register(route: { kind: "exact" | "prefix"; path: string; handler: Handler }): () => void
+}
+
 function sendJson(res: ServerResponse, status: number, body: Json, extraHeaders: Record<string, string> = {}) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", ...extraHeaders })
   res.end(JSON.stringify(body))
@@ -75,9 +79,10 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
   })
   ctx.provide("auth", authService)
 
+  const webServer = (ctx as unknown as { webServer: WebServerLike }).webServer
   const secure = config.secureCookie
   const cookieName = sessionCookieName(secure)
-  const USERS_PREFIX = "/api/octopus-auth/users/"
+  const USERS_PREFIX = "/api/octopus-auth/users"
 
   function assertNotSelf(session: AuthSession, targetId: string) {
     if (session.user.id === targetId) throw httpError(400, "self-operation", "不能对自己执行该操作")
@@ -94,7 +99,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
 
   ctx.effect(() => {
     const disposers = [
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/login",
         handler: async (_req, res) => {
@@ -104,7 +109,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           res.end(renderLoginPage({ needsSetup }))
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/api/octopus-auth/login",
         handler: async (req, res, bodyText) => {
@@ -118,7 +123,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           } catch (error) { handleError(res, error) }
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/api/octopus-auth/logout",
         handler: async (req, res) => {
@@ -129,7 +134,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           } catch (error) { handleError(res, error) }
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/api/octopus-auth/me",
         handler: async (req, res) => {
@@ -142,7 +147,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           } catch (error) { handleError(res, error) }
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/api/octopus-auth/verify",
         handler: async (req, res) => {
@@ -151,7 +156,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           res.end()
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "exact",
         path: "/api/octopus-auth/users",
         handler: async (req, res, bodyText) => {
@@ -174,14 +179,14 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
           } catch (error) { handleError(res, error) }
         },
       }),
-      ctx.webServer.register({
+      webServer.register({
         kind: "prefix",
         path: USERS_PREFIX,
         handler: async (req, res, bodyText) => {
           try {
             const session = await authService.requireAdmin(req)
             assertSameOrigin(req)
-            const id = decodeURIComponent((req.url ?? "").slice(USERS_PREFIX.length).split("?")[0])
+            const id = decodeURIComponent((req.url ?? "").slice(USERS_PREFIX.length).replace(/^\//, "").split("?")[0])
             if (!id) throw httpError(404, "not-found", "缺少用户 id")
             const method = (req.method ?? "GET").toUpperCase()
 

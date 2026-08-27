@@ -77,7 +77,7 @@ describe("用户管理 API 行为保证", () => {
     const boss = await makeAdmin(users, "boss", "admin")
     const cookie = await login(routes, "boss", "ip-b")
     const del = createRes()
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "DELETE", url: `/api/octopus-auth/users/${boss.id}`,
         headers: { ...SAME_ORIGIN, cookie }, socket: { remoteAddress: "ip-b" },
@@ -86,7 +86,7 @@ describe("用户管理 API 行为保证", () => {
     expect(JSON.parse(del.calls[0].body).error).toBe("self-operation")
 
     const disableSelf = createRes()
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "PATCH", url: `/api/octopus-auth/users/${boss.id}`,
         headers: { ...SAME_ORIGIN, cookie }, socket: { remoteAddress: "ip-b" },
@@ -94,7 +94,7 @@ describe("用户管理 API 行为保证", () => {
     expect(JSON.parse(disableSelf.calls[0].body).error).toBe("self-operation")
 
     const demote = createRes()
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "PATCH", url: `/api/octopus-auth/users/${boss.id}`,
         headers: { ...SAME_ORIGIN, cookie }, socket: { remoteAddress: "ip-b" },
@@ -116,7 +116,7 @@ describe("用户管理 API 行为保证", () => {
     const tempId = JSON.parse(tempRes.calls[0].body).user.id
 
     const reset = createRes()
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "PATCH", url: `/api/octopus-auth/users/${tempId}`,
         headers: { ...SAME_ORIGIN, cookie: await login(routes, "vice", "ip-v") },
@@ -126,7 +126,7 @@ describe("用户管理 API 行为保证", () => {
 
     const demoteVice = createRes()
     const vice = (await users.findByUsername("vice"))!
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "PATCH", url: `/api/octopus-auth/users/${vice.id}`,
         headers: { ...SAME_ORIGIN, cookie: await login(routes, "boss", "ip-b") },
@@ -135,7 +135,7 @@ describe("用户管理 API 行为保证", () => {
     expect(demoteVice.calls[0].status).toBe(200)
 
     const removed = createRes()
-    await routes.get("prefix /api/octopus-auth/users/")!.handler(
+    await routes.get("prefix /api/octopus-auth/users")!.handler(
       {
         method: "DELETE", url: `/api/octopus-auth/users/${tempId}`,
         headers: { ...SAME_ORIGIN, cookie: await login(routes, "boss", "ip-b2") },

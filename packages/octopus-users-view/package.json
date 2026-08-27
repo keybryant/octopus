@@ -35,5 +35,5 @@
     "vite": "^6.0.0",
     "vitest": "^4.1.8"
   },
-  "dsh.bundle.patch": "./cordis.patch.yml"
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
 }

@@ -1,7 +1,7 @@
 import type { KvUnitDescriptor, KvUnit, StorageBackend } from "@deepseek-ai/dsh-storage"
 
 export const USERS_UNIT_DESCRIPTOR: KvUnitDescriptor = {
-  name: "octopus-users",
+  name: "octopus_users",
   version: 1,
   tables: ["users", "sessions"],
   hasGlobal: false,

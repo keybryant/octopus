@@ -12,6 +12,7 @@ describe("octopus-users-view", () => {
       title: "用户管理",
       order: 900,
       entry: "/octopus/users-view/assets/index.js",
+      access: "admin",
     })
     expect(webServer.register).toHaveBeenCalledWith(expect.objectContaining({
       kind: "prefix",

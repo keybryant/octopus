@@ -38,7 +38,7 @@ describe("octopus-auth apply", () => {
       "exact /api/octopus-auth/verify",
       "exact /api/octopus-auth/users",
       "exact /login",
-      "prefix /api/octopus-auth/users/",
+      "prefix /api/octopus-auth/users",
     ].sort())
   })
 
