@@ -33,7 +33,7 @@ describe("serveStaticFiles", () => {
 
   it("serves a file with correct content-type", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/index.js" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/index.js", headers: {} }, res)
     expect(res.calls[0].status).toBe(200)
     expect(res.calls[0].headers["content-type"]).toBe("text/javascript; charset=utf-8")
     expect(res.calls[0].body).toBe("console.log(1)")
@@ -41,44 +41,44 @@ describe("serveStaticFiles", () => {
 
   it("serves unknown extensions as octet-stream", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/blob.bin" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/blob.bin", headers: {} }, res)
     expect(res.calls[0].headers["content-type"]).toBe("application/octet-stream")
   })
 
   it("HEAD returns headers without body", async () => {
     const res = createRes()
-    await handler({ method: "HEAD", url: "/workbench/assets/index.js" }, res)
+    await handler({ method: "HEAD", url: "/workbench/assets/index.js", headers: {} }, res)
     expect(res.calls[0].status).toBe(200)
     expect(res.calls[0].body).toBe("")
   })
 
   it("rejects non-GET/HEAD methods", async () => {
     const res = createRes()
-    await handler({ method: "POST", url: "/workbench/assets/index.js" }, res)
+    await handler({ method: "POST", url: "/workbench/assets/index.js", headers: {} }, res)
     expect(res.calls[0].status).toBe(405)
   })
 
   it("rejects traversal outside the root", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/..%2F..%2Fpackage.json" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/..%2F..%2Fpackage.json", headers: {} }, res)
     expect(res.calls[0].status).toBe(403)
   })
 
   it("returns 404 for missing files", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/nope.js" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/nope.js", headers: {} }, res)
     expect(res.calls[0].status).toBe(404)
   })
 
   it("returns 404 for paths outside the base", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/other/index.js" }, res)
+    await handler({ method: "GET", url: "/other/index.js", headers: {} }, res)
     expect(res.calls[0].status).toBe(404)
   })
 
   it("returns 400 for malformed percent encoding", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/%zz" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/%zz", headers: {} }, res)
     expect(res.calls[0].status).toBe(400)
   })
 
@@ -87,13 +87,13 @@ describe("serveStaticFiles", () => {
       cacheControl: "public, max-age=31536000, immutable",
     })
     const res = createRes()
-    await cached({ method: "GET", url: "/workbench/assets/index.js" }, res)
+    await cached({ method: "GET", url: "/workbench/assets/index.js", headers: {} }, res)
     expect(res.calls[0].headers["cache-control"]).toBe("public, max-age=31536000, immutable")
   })
 
   it("omits cache-control by default", async () => {
     const res = createRes()
-    await handler({ method: "GET", url: "/workbench/assets/index.js" }, res)
+    await handler({ method: "GET", url: "/workbench/assets/index.js", headers: {} }, res)
     expect(res.calls[0].headers["cache-control"]).toBeUndefined()
   })
 })

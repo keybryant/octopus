@@ -3,6 +3,8 @@ export interface WorkbenchModule {
   title: string
   order?: number
   entry: string
+  /** 缺省视为 'authenticated'；'admin' 仅管理员可见 */
+  access?: "authenticated" | "admin"
 }
 
 export interface WorkbenchRegistry {

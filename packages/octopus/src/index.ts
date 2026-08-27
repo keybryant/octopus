@@ -3,6 +3,7 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import z from "@deepseek-ai/schemastery"
 import type { Context } from "@deepseek-ai/cordis"
+import { isHttpError, type AuthService } from "octopus-auth"
 import { createRegistry, type WorkbenchRegistry } from "./workbench.js"
 import { serveStaticFiles, type HttpRequest, type HttpResponse } from "./static.js"
 import { WORKBENCH_VENDOR_PREFIX } from "./vite-plugin.js"
@@ -13,7 +14,7 @@ export { octopusVendor, WORKBENCH_VENDOR_PREFIX } from "./vite-plugin.js"
 export type { WorkbenchModule, WorkbenchRegistry } from "./workbench.js"
 
 export const name = "octopus"
-export const inject = ["webServer"]
+export const inject = ["webServer", "auth"]
 
 export const DEFAULT_CONFIG = { title: "My Workbench", greeting: "" }
 
@@ -40,16 +41,30 @@ declare module "@deepseek-ai/cordis" {
   interface Context {
     workbench: WorkbenchRegistry
     webServer: WebServerLike
+    auth: AuthService
   }
 }
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(HERE, "..", "web-dist")
 
-function jsonHandler(getValue: () => unknown) {
-  return async function (_req: HttpRequest, res: HttpResponse) {
-    res.writeHead(200, { "content-type": "application/json; charset=utf-8" })
-    res.end(JSON.stringify(getValue()))
+type AuthedHandler = (req: HttpRequest, res: HttpResponse) => Promise<void>
+
+/** 统一鉴权包装：requireAuth 抛 HttpError 时转 JSON 状态码并短路 */
+function withAuth(auth: AuthService, inner: (session: Awaited<ReturnType<AuthService["requireAuth"]>>, req: HttpRequest, res: HttpResponse) => Promise<void>): AuthedHandler {
+  return async (req, res) => {
+    let session
+    try {
+      session = await auth.requireAuth(req)
+    } catch (error) {
+      if (isHttpError(error)) {
+        res.writeHead(error.statusCode, { "content-type": "application/json; charset=utf-8" })
+        res.end(JSON.stringify({ error: error.code, message: error.message }))
+        return
+      }
+      throw error
+    }
+    await inner(session, req, res)
   }
 }
 
@@ -75,6 +90,7 @@ const ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable"
 export function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG> = {}) {
   const effective = resolveConfig(config)
   const registry = createRegistry()
+  const auth = ctx.auth
   ctx.provide("workbench", registry)
   ctx.effect(() => {
     const serveIndex = createIndexHandler(DIST_DIR)
@@ -93,8 +109,23 @@ export function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG> = {})
           cacheControl: ASSET_CACHE_CONTROL,
         }),
       }),
-      ctx.webServer.register({ kind: "exact", path: "/api/octopus/config", handler: jsonHandler(() => effective) }),
-      ctx.webServer.register({ kind: "exact", path: "/api/octopus/modules", handler: jsonHandler(() => registry.list()) }),
+      ctx.webServer.register({
+        kind: "exact", path: "/api/octopus/config",
+        handler: withAuth(auth, async (_session, _req, res) => {
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" })
+          res.end(JSON.stringify(effective))
+        }),
+      }),
+      ctx.webServer.register({
+        kind: "exact", path: "/api/octopus/modules",
+        handler: withAuth(auth, async (session, _req, res) => {
+          const visible = registry.list().filter(
+            (m) => m.access !== "admin" || session.user.role === "admin",
+          )
+          res.writeHead(200, { "content-type": "application/json; charset=utf-8" })
+          res.end(JSON.stringify(visible))
+        }),
+      }),
     ]
     return () => {
       for (const dispose of disposers) dispose()
