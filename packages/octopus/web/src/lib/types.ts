@@ -21,8 +21,6 @@ export interface ProjectSummary {
   /** 两字母缩写，用于方块标识 */
   shortName: string
   description: string
-  iteration: string
-  dueDate: string
   progressPct: number
   weeklyDone: number
   weeklyTotal: number

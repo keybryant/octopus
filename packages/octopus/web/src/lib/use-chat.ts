@@ -22,7 +22,7 @@ function buildWelcome(): ChatMessage {
     id: nextId("msg"),
     role: "assistant",
     time: nowHHmm(),
-    text: `${timeGreeting(new Date().getHours())}。当前上下文：${project.name} · ${project.iteration}，还有 5 天截止。今天有 2 个任务临近到期，要我先把今天的优先事项列出来，还是直接开始处理某个需求？`,
+    text: `${timeGreeting(new Date().getHours())}。当前上下文：${project.name}。今天有 2 个任务临近到期，要我先把今天的优先事项列出来，还是直接开始处理某个需求？`,
   }
 }
 

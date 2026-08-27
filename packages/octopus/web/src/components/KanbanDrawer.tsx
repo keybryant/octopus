@@ -39,7 +39,7 @@ export function KanbanDrawer({ open, onClose, columns, onCreateTask }: KanbanDra
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title="任务看板"
-      subtitle="Octopus Platform · 迭代 4.2"
+      subtitle="Octopus Platform"
     >
       <div className="mb-4 flex items-center justify-between">
         <span className="text-xs text-text-faint">拖拽暂不支持，使用按钮新建</span>
