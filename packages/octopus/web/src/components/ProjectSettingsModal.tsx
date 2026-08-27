@@ -41,7 +41,7 @@ export function ProjectSettingsModal({ open, onClose, project, onSave, onDelete 
       setConfirmingDelete(false)
       setError(null)
     }
-  }, [open, project])
+  }, [open, project?.id])
 
   if (!project) return null
 
