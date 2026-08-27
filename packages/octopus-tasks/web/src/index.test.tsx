@@ -66,8 +66,28 @@ describe("TasksModule", () => {
     )
   })
 
-  it("拖拽失败：回滚原列并显示错误", async () => {
+  it("状态下拉兜底：点击切换状态 → 菜单项 → PATCH；done 卡无按钮", async () => {
     vi.stubGlobal("location", { ...window.location, search: "" })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: TASKS }))
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: { ...TASKS[0], status: "doing" } }))
+    vi.stubGlobal("fetch", fetchMock)
+    render(<TasksModule />)
+    await screen.findByText("导出 CSV")
+
+    await userEvent.click(screen.getByRole("button", { name: "切换状态 TASK-2800" }))
+    await userEvent.click(await screen.findByRole("menuitem", { name: "进行中" }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/octopus-tasks/tasks/TASK-2800",
+        expect.objectContaining({ method: "PATCH", body: JSON.stringify({ status: "doing" }) }),
+      ),
+    )
+    expect(screen.queryByRole("button", { name: "切换状态 TASK-2802" })).not.toBeInTheDocument()
+  })
+
+  it("拖拽失败：回滚原列并显示错误", async () => {    vi.stubGlobal("location", { ...window.location, search: "" })
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(mockResponse(200, { ok: true, data: TASKS }))
       .mockResolvedValueOnce(mockResponse(422, { ok: false, error: { code: "invalid-transition", message: "invalid status transition" } }))

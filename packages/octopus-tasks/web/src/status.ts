@@ -1,4 +1,3 @@
-import type { BadgeTone } from "octopus-ui"
 import type { TaskStatus } from "./types"
 
 export interface ColumnSpec {
@@ -14,10 +13,3 @@ export const TASK_COLUMNS: ColumnSpec[] = [
   { key: "review", label: "评审中", dotColor: "#A78BFA" },
   { key: "done", label: "已完成", dotColor: "#34D399" },
 ]
-
-export const STATUS_META: Record<TaskStatus, { label: string; tone: BadgeTone }> = {
-  todo: { label: "待处理", tone: "neutral" },
-  doing: { label: "进行中", tone: "info" },
-  review: { label: "评审中", tone: "warn" },
-  done: { label: "已完成", tone: "success" },
-}

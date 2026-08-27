@@ -107,7 +107,8 @@ export default function TasksModule() {
         .map((r) => ({
           title: r.title.trim(),
           priority: r.priority ?? "P1",
-          assignee: r.assignee,
+          assignee: r.assignee?.trim() || undefined,
+          description: r.description,
         }))
       const created = await createTaskBatch({
         requirementId: payload.requirementId,

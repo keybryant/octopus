@@ -1,17 +1,12 @@
-import { useEffect, useState } from "react"
+import { type DecomposePayload } from "octopus-ui"
 import { Button, Input, Modal, Spinner } from "octopus-ui"
 import type { TaskDraft } from "../types"
+
+export type { DecomposePayload } from "octopus-ui"
 
 export interface DraftRow extends TaskDraft {
   key: number
   checked: boolean
-}
-
-export interface DecomposePayload {
-  requirementId: string
-  title: string
-  description?: string
-  priority?: "P0" | "P1" | "P2"
 }
 
 export interface DecomposeDraftsModalProps {
@@ -42,11 +37,6 @@ export function DecomposeDraftsModal({
   onClose,
   onSubmit,
 }: DecomposeDraftsModalProps) {
-  const [collapsed, setCollapsed] = useState<number | null>(null)
-  useEffect(() => {
-    if (!open) setCollapsed(null)
-  }, [open])
-
   const canSubmit = rows.some((r) => r.checked && r.title.trim().length > 0) && !submitting
 
   return (
@@ -96,6 +86,17 @@ export function DecomposeDraftsModal({
                       ))}
                     </select>
                   </label>
+                  <div className="mt-2 flex items-center gap-2.5">
+                    <span className="w-5 shrink-0" />
+                    <Input
+                      value={row.assignee ?? ""}
+                      aria-label={`负责人 ${row.key}`}
+                      onChange={(e) => onRowChange(row.key, { assignee: e.target.value })}
+                      disabled={!row.checked}
+                      placeholder="负责人（可选）"
+                      className="w-32"
+                    />
+                  </div>
                 </div>
               ))}
             </>
