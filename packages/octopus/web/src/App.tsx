@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { ThemeProvider } from "octopus-ui"
-import { fetchConfig, type WorkbenchConfig } from "./api"
+import { fetchConfig, fetchModules, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
+import ModuleGrid from "./ModuleGrid"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
@@ -46,6 +47,11 @@ export default function App() {
     fetchMe()
       .then(setMe)
       .catch(() => redirectToLogin())
+  }, [])
+
+  const [modules, setModules] = useState<WorkbenchModuleInfo[]>([])
+  useEffect(() => {
+    void fetchModules().then(setModules)
   }, [])
 
   // ── 项目域状态（mock 数据源 + 本会话新增）──
@@ -123,6 +129,12 @@ export default function App() {
           onOpenRequirements={() => setDrawer("reqs")}
           onOpenNewRequirement={() => setNewRequirementOpen(true)}
         />
+
+        {modules.length > 0 && (
+          <div className="shrink-0 border-b border-border bg-surface/50 p-4">
+            <ModuleGrid modules={modules} />
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           <ChatPane agentClient={agentClient} onArtifactsChange={onArtifactsChange} />

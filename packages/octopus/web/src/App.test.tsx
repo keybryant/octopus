@@ -3,7 +3,7 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { fetchConfig } from "./api"
+import { fetchConfig, fetchModules } from "./api"
 import { fetchMe, redirectToLogin } from "./lib/auth"
 
 vi.mock("./api", () => ({
@@ -11,6 +11,7 @@ vi.mock("./api", () => ({
   fetchModules: vi.fn().mockResolvedValue([]),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
+const mockedFetchModules = vi.mocked(fetchModules)
 
 vi.mock("./lib/auth", () => ({
   fetchMe: vi.fn().mockResolvedValue({
@@ -50,6 +51,16 @@ describe("App (v5 agent homepage)", () => {
     const { container } = await renderApp()
     await waitFor(() => expect(mockedRedirectToLogin).toHaveBeenCalled())
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it("renders module grid with fetched modules and lazy-loads card content", async () => {
+    mockedFetchModules.mockResolvedValueOnce([
+      { id: "users-view", title: "用户管理", entry: "/octopus/users-view/assets/index.js" },
+    ])
+    await renderApp()
+    expect(screen.getByRole("button", { name: "用户管理" })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole("button", { name: "用户管理" }))
+    expect(await screen.findByText(/加载失败|加载中/)).toBeInTheDocument()
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {
