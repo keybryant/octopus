@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { ThemeProvider } from "octopus-ui"
 import { fetchConfig, fetchModules, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
-import ModuleGrid from "./ModuleGrid"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
+import { ModulePaneModal } from "./components/ModulePaneModal"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { NewRequirementModal } from "./components/NewRequirementModal"
 import { ProjectStrip } from "./components/ProjectStrip"
@@ -53,6 +53,8 @@ export default function App() {
   useEffect(() => {
     void fetchModules().then(setModules)
   }, [])
+  const usersViewEntry = modules.find((m) => m.id === "users-view")?.entry
+  const [userPaneOpen, setUserPaneOpen] = useState(false)
 
   // ── 项目域状态（mock 数据源 + 本会话新增）──
   const [projects, setProjects] = useState<ProjectSummary[]>(PROJECTS)
@@ -121,6 +123,7 @@ export default function App() {
           onOpenNewProject={() => setNewProjectOpen(true)}
           me={me}
           onLogout={() => void logout()}
+          onOpenUserManagement={me.user.role === "admin" ? () => setUserPaneOpen(true) : undefined}
         />
 
         <ProjectStrip
@@ -129,12 +132,6 @@ export default function App() {
           onOpenRequirements={() => setDrawer("reqs")}
           onOpenNewRequirement={() => setNewRequirementOpen(true)}
         />
-
-        {modules.length > 0 && (
-          <div className="shrink-0 border-b border-border bg-surface/50 p-4">
-            <ModuleGrid modules={modules} />
-          </div>
-        )}
 
         <div className="flex min-h-0 flex-1">
           <ChatPane agentClient={agentClient} onArtifactsChange={onArtifactsChange} />
@@ -145,6 +142,13 @@ export default function App() {
             onExpand={() => setRailCollapsed(false)}
           />
         </div>
+
+        <ModulePaneModal
+          open={userPaneOpen}
+          title="用户管理"
+          entry={usersViewEntry}
+          onClose={() => setUserPaneOpen(false)}
+        />
 
         <KanbanDrawer
           open={drawer === "tasks"}

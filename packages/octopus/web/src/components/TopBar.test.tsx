@@ -44,6 +44,22 @@ describe("TopBar", () => {
     expect(screen.queryByRole("link", { name: "插件市场" })).not.toBeInTheDocument()
   })
 
+  it("shows 用户管理 under 全局 only when onOpenUserManagement provided", async () => {
+    const user = userEvent.setup()
+    const onOpen = vi.fn()
+    render(<TopBar {...props} onOpenUserManagement={onOpen} />)
+    await user.click(screen.getByLabelText("设置"))
+    await user.click(await screen.findByText("用户管理"))
+    expect(onOpen).toHaveBeenCalled()
+  })
+
+  it("hides 用户管理 when onOpenUserManagement is not provided", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} />)
+    await user.click(screen.getByLabelText("设置"))
+    expect(screen.queryByText("用户管理")).not.toBeInTheDocument()
+  })
+
   it("user menu shows username and role, logout calls onLogout when canLogout", async () => {
     const user = userEvent.setup()
     render(<TopBar {...props} />)

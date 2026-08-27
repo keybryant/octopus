@@ -19,6 +19,7 @@ export interface TopBarProps {
   onOpenNewProject: () => void
   me: MeResponse
   onLogout: () => void
+  onOpenUserManagement?: () => void
 }
 
 const iconBtn =
@@ -36,6 +37,7 @@ export function TopBar({
   onOpenNewProject,
   me,
   onLogout,
+  onOpenUserManagement,
 }: TopBarProps) {
   const current = projects.find((p) => p.id === currentProjectId) ?? projects[0]
 
@@ -112,6 +114,9 @@ export function TopBar({
           <DropdownMenuLabel>全局</DropdownMenuLabel>
           <DropdownMenuItem>工作区偏好</DropdownMenuItem>
           <DropdownMenuItem>通知设置</DropdownMenuItem>
+          {onOpenUserManagement && (
+            <DropdownMenuItem onSelect={onOpenUserManagement}>用户管理</DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <a href="/" className="block px-4 py-2 text-[13px] text-muted-foreground hover:text-accent">
             进入主界面
