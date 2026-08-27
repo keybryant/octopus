@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
-import { ThemeProvider } from "octopus-ui"
+import { Button, ThemeProvider } from "octopus-ui"
+import { FolderOpen, Plus } from "octopus-ui"
 import { createProject, deleteProject, fetchConfig, fetchProjects, updateProject, type ProjectRecordView, type WorkbenchConfig } from "./api"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
@@ -13,7 +14,6 @@ import { TopBar } from "./components/TopBar"
 import {
   createDefaultAgentClient,
   KANBAN_COLUMNS,
-  PROJECTS,
   REQUIREMENTS,
 } from "./lib/datasource"
 import { deriveShortName } from "./lib/short-name"
@@ -41,8 +41,6 @@ function toSummary(p: ProjectRecordView): ProjectSummary {
     name: p.name,
     shortName: deriveShortName(p.name),
     description: p.description || "暂无描述",
-    iteration: "未排期",
-    dueDate: "-",
     progressPct: 0,
     weeklyDone: 0,
     weeklyTotal: 0,
@@ -59,21 +57,19 @@ export default function App() {
   }, [])
 
   // ── 项目域状态（插件 API 可用时接管；否则 mock 数据源 + 本会话新增）──
-  const [projects, setProjects] = useState<ProjectSummary[]>(PROJECTS)
-  const [projectId, setProjectId] = useState(projects[0].id)
+  const [projects, setProjects] = useState<ProjectSummary[]>([])
+  const [projectId, setProjectId] = useState<string | undefined>(undefined)
   const [records, setRecords] = useState<Record<string, ProjectRecordView>>({})
-  const [usingApi, setUsingApi] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const current = projects.find((p) => p.id === projectId) ?? projects[0]
 
   useEffect(() => {
     void fetchProjects().then((items) => {
-      if (!items || items.length === 0) return // 服务不在或空 → 保持 mock
-      setUsingApi(true)
-      const sorted = [...items].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const list = items ?? []
+      const sorted = [...list].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       setRecords(Object.fromEntries(sorted.map((p) => [p.id, p])))
       setProjects(sorted.map(toSummary))
-      setProjectId(sorted[0].id)
+      setProjectId(sorted[0]?.id)
     })
   }, [])
 
@@ -92,37 +88,19 @@ export default function App() {
   const agentClient = useMemo(createDefaultAgentClient, [])
 
   const handleCreateProject = async (data: { name: string; description: string }) => {
-    if (usingApi) {
-      const created = await createProject({ name: data.name, description: data.description })
-      if (!created) {
-        console.warn("[octopus] 创建项目失败")
-        return
-      }
-      setRecords((prev) => ({ ...prev, [created.id]: created }))
-      setProjects((prev) => [...prev, toSummary(created)])
-      setProjectId(created.id)
+    const created = await createProject({ name: data.name, description: data.description })
+    if (!created) {
+      console.warn("[octopus] 创建项目失败")
       return
     }
-    const project: ProjectSummary = {
-      id: `project-${Date.now()}`,
-      name: data.name,
-      shortName: deriveShortName(data.name),
-      description: data.description || "暂无描述",
-      iteration: "未排期",
-      dueDate: "-",
-      progressPct: 0,
-      weeklyDone: 0,
-      weeklyTotal: 0,
-      activeRequirements: 0,
-      overdue: 0,
-      members: [],
-    }
-    setProjects((prev) => [...prev, project])
-    setProjectId(project.id)
+    setRecords((prev) => ({ ...prev, [created.id]: created }))
+    setProjects((prev) => [...prev, toSummary(created)])
+    setProjectId(created.id)
   }
 
   // ── 项目设置弹窗（仅 API 模式有真实记录可编辑）──
   const settingsTarget: SettingsProject | null = (() => {
+    if (!projectId) return null
     const rec = records[projectId]
     if (!rec) return null
     return {
@@ -136,7 +114,7 @@ export default function App() {
   })()
 
   const handleSaveSettings = async (data: { description: string; status: SettingsProject["status"] }) => {
-    if (!usingApi || !settingsTarget) return false
+    if (!settingsTarget) return false
     const ok = await updateProject(settingsTarget.id, data)
     if (!ok) return false
     setRecords((prev) => ({ ...prev, [settingsTarget.id]: { ...prev[settingsTarget.id], ...data } }))
@@ -147,16 +125,16 @@ export default function App() {
   }
 
   const handleDeleteSettings = async () => {
-    if (!usingApi || !settingsTarget) return false
+    if (!settingsTarget) return false
     const ok = await deleteProject(settingsTarget.id)
     if (!ok) return false
     const restRecords = { ...records }
     delete restRecords[settingsTarget.id]
     setRecords(restRecords)
     const rest = projects.filter((p) => p.id !== settingsTarget.id)
-    const next = rest.length > 0 ? rest : PROJECTS // 删空回落 mock（与列表策略一致）
-    setProjects(next)
-    setProjectId(next[0].id)
+    setProjects(rest)
+    setProjectId(rest[0]?.id)
+    if (rest.length === 0) setDrawer(null)
     return true
   }
 
@@ -188,51 +166,70 @@ export default function App() {
           onOpenProjectSettings={() => setSettingsOpen(true)}
         />
 
-        <ProjectStrip
-          summary={current}
-          onOpenKanban={() => setDrawer("tasks")}
-          onOpenRequirements={() => setDrawer("reqs")}
-          onOpenNewRequirement={() => setNewRequirementOpen(true)}
-        />
+        {current ? (
+          <>
+            <ProjectStrip
+              summary={current}
+              onOpenKanban={() => setDrawer("tasks")}
+              onOpenRequirements={() => setDrawer("reqs")}
+              onOpenNewRequirement={() => setNewRequirementOpen(true)}
+            />
 
-        <div className="flex min-h-0 flex-1">
-          <ChatPane agentClient={agentClient} onArtifactsChange={onArtifactsChange} />
-          <ArtifactsRail
-            artifacts={artifacts}
-            collapsed={railCollapsed}
-            onCollapse={() => setRailCollapsed(true)}
-            onExpand={() => setRailCollapsed(false)}
-          />
-        </div>
+            <div className="flex min-h-0 flex-1">
+              <ChatPane agentClient={agentClient} onArtifactsChange={onArtifactsChange} />
+              <ArtifactsRail
+                artifacts={artifacts}
+                collapsed={railCollapsed}
+                onCollapse={() => setRailCollapsed(true)}
+                onExpand={() => setRailCollapsed(false)}
+              />
+            </div>
 
-        <KanbanDrawer
-          open={drawer === "tasks"}
-          onClose={() => setDrawer(null)}
-          columns={columns}
-          onCreateTask={handleCreateTask}
-        />
-        <RequirementsDrawer
-          open={drawer === "reqs"}
-          onClose={() => setDrawer(null)}
-          requirements={requirements}
-        />
+            <KanbanDrawer
+              open={drawer === "tasks"}
+              onClose={() => setDrawer(null)}
+              columns={columns}
+              onCreateTask={handleCreateTask}
+            />
+            <RequirementsDrawer
+              open={drawer === "reqs"}
+              onClose={() => setDrawer(null)}
+              requirements={requirements}
+            />
+
+            <NewRequirementModal
+              open={newRequirementOpen}
+              onClose={() => setNewRequirementOpen(false)}
+              onCreate={handleCreateRequirement}
+            />
+            <ProjectSettingsModal
+              open={settingsOpen && settingsTarget !== null}
+              onClose={() => setSettingsOpen(false)}
+              project={settingsTarget}
+              onSave={handleSaveSettings}
+              onDelete={handleDeleteSettings}
+            />
+          </>
+        ) : (
+          <div className="flex flex-1 flex-col items-center justify-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-border-strong bg-surface-hover">
+              <FolderOpen className="h-6 w-6 text-accent" />
+            </div>
+            <div className="text-center">
+              <p className="text-[15px] font-semibold text-foreground">暂无项目</p>
+              <p className="mt-1 text-[13px] text-muted-foreground">从顶部切换器新建项目，开始协作</p>
+            </div>
+            <Button variant="primary" size="sm" onClick={() => setNewProjectOpen(true)}>
+              <Plus className="h-3.5 w-3.5" />
+              新建项目
+            </Button>
+          </div>
+        )}
 
         <NewProjectModal
           open={newProjectOpen}
           onClose={() => setNewProjectOpen(false)}
           onCreate={handleCreateProject}
-        />
-        <NewRequirementModal
-          open={newRequirementOpen}
-          onClose={() => setNewRequirementOpen(false)}
-          onCreate={handleCreateRequirement}
-        />
-        <ProjectSettingsModal
-          open={settingsOpen && settingsTarget !== null}
-          onClose={() => setSettingsOpen(false)}
-          project={settingsTarget}
-          onSave={handleSaveSettings}
-          onDelete={handleDeleteSettings}
         />
       </div>
     </ThemeProvider>

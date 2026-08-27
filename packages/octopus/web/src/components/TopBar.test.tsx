@@ -16,7 +16,6 @@ describe("TopBar", () => {
   it("renders brand and current project in switcher", () => {
     render(<TopBar {...props} />)
     expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0)
-    expect(screen.getByText("迭代 4.2 · 第 2 周")).toBeInTheDocument()
   })
 
   it("switcher lists projects and switches", async () => {
@@ -44,5 +43,15 @@ describe("TopBar", () => {
     await user.click(screen.getByTitle("设置"))
     await user.click(screen.getByText("项目设置"))
     expect(props.onOpenProjectSettings).toHaveBeenCalledOnce()
+  })
+
+  it("with no projects shows 无项目 and hides project settings group", async () => {
+    const user = userEvent.setup()
+    render(<TopBar {...props} projects={[]} currentProjectId={undefined} />)
+    expect(screen.getByText("无项目")).toBeInTheDocument()
+    await user.click(screen.getByTitle("设置"))
+    expect(screen.queryByText("项目设置")).not.toBeInTheDocument()
+    expect(screen.queryByText("成员与权限")).not.toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "进入主界面" })).toBeInTheDocument()
   })
 })

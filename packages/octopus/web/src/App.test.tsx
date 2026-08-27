@@ -3,20 +3,31 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { deleteProject, fetchConfig, fetchProjects, updateProject } from "./api"
+import { createProject, deleteProject, fetchConfig, fetchProjects, updateProject } from "./api"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
-  fetchProjects: vi.fn().mockResolvedValue(null), // 默认走 mock 回退，保住既有用例
+  fetchProjects: vi.fn().mockResolvedValue(null), // 无数据 → 空列表
   createProject: vi.fn(),
   updateProject: vi.fn().mockResolvedValue(true),
   deleteProject: vi.fn().mockResolvedValue(true),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
 const mockedFetchProjects = vi.mocked(fetchProjects)
+const mockedCreateProject = vi.mocked(createProject)
 const mockedUpdateProject = vi.mocked(updateProject)
 const mockedDeleteProject = vi.mocked(deleteProject)
+
+const apiProject = {
+  id: "p-api",
+  name: "API Project",
+  description: "",
+  status: "active" as const,
+  workspacePath: "~/r/API Project",
+  workspaceId: "w",
+  createdAt: "2026-08-26T00:00:00.000Z",
+}
 
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
@@ -24,19 +35,21 @@ describe("App (v5 agent homepage)", () => {
     mockedFetchProjects.mockResolvedValue(null)
   })
 
-  it("renders v5 shell with brand, project strip metrics and chat welcome", async () => {
+  it("renders empty project state when no projects", async () => {
     render(<App />)
-    expect(screen.getAllByText("Octopus Platform").length).toBeGreaterThan(0) // 切换器 + strip
-    await waitFor(() =>
-      expect(screen.getByText(/当前上下文：Octopus Platform · 迭代 4.2/)).toBeInTheDocument(),
-    )
+    // 无数据 → 空列表：切换器显示无项目，主区空状态，聊天/看板等全部隐藏
+    expect(screen.getByText("无项目")).toBeInTheDocument()
+    expect(screen.getByText("暂无项目")).toBeInTheDocument()
+    expect(screen.queryByText(/当前上下文/)).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /任务看板/ })).not.toBeInTheDocument()
     expect(mockedFetchConfig).toHaveBeenCalled()
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {
+    mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    await user.click(await screen.findByRole("button", { name: /任务看板/ }))
     expect(await screen.findByRole("heading", { name: "任务看板" })).toBeInTheDocument()
     fireEvent.keyDown(document, { key: "Escape" })
     await waitFor(() =>
@@ -45,9 +58,10 @@ describe("App (v5 agent homepage)", () => {
   })
 
   it("chat send round-trip shows assistant cards and artifacts rail", async () => {
+    mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     render(<App />)
-    const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
+    const box = await screen.findByPlaceholderText(/给 Octo Agent 下指令/)
     await user.type(box, "列出优先事项")
     fireEvent.keyDown(box, { key: "Enter" })
     expect(await screen.findByText("让 Agent 接手 →")).toBeInTheDocument()
@@ -55,23 +69,47 @@ describe("App (v5 agent homepage)", () => {
   })
 
   it("artifacts rail collapses and restores", async () => {
+    mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByTitle("收起"))
+    await user.click(await screen.findByTitle("收起"))
     expect(screen.queryByText("本会话产出")).not.toBeInTheDocument()
     await user.click(screen.getByTitle("展开产出面板"))
     expect(screen.getByText("本会话产出")).toBeInTheDocument()
   })
 
-  it("project switcher swaps strip metrics", async () => {
+  it("project switcher switches current project", async () => {
+    mockedFetchProjects.mockResolvedValue([
+      {
+        id: "p-a",
+        name: "Alpha",
+        description: "",
+        status: "active",
+        workspacePath: "~/r/A",
+        workspaceId: "w",
+        createdAt: "2026-08-25T00:00:00.000Z",
+      },
+      {
+        id: "p-b",
+        name: "Beta",
+        description: "",
+        status: "active",
+        workspacePath: "~/r/B",
+        workspaceId: "w",
+        createdAt: "2026-08-26T00:00:00.000Z",
+      },
+    ])
     const user = userEvent.setup()
     render(<App />)
+    // 默认选中最新项目 p-b
+    await waitFor(() => expect(screen.getAllByText("Beta").length).toBeGreaterThan(0))
+    // 切换到 Alpha
     await user.click(screen.getByTestId("project-switcher"))
-    await user.click(screen.getByText("Merchant Portal"))
-    // 切换后指标随项目变化
-    expect(screen.getByText("迭代 2.8 · 第 3 周")).toBeInTheDocument()
-    expect(screen.getByText("12")).toBeInTheDocument()
-    expect(screen.getByText("/30")).toBeInTheDocument()
+    await user.click(screen.getByText("Alpha"))
+    // 打开项目设置弹窗，确认当前项目已切换为 Alpha（切换器 + 弹窗均显示）
+    await user.click(screen.getByTitle("设置"))
+    await user.click(screen.getByText("项目设置"))
+    expect((await screen.findAllByText("Alpha")).length).toBeGreaterThan(0)
   })
 
   it("loads projects from api when available", async () => {
@@ -106,7 +144,8 @@ describe("App (v5 agent homepage)", () => {
     const user = userEvent.setup()
     await user.click(await screen.findByTitle("设置"))
     await user.click(screen.getByText("项目设置"))
-    fireEvent.click(await screen.findByText("已暂停"))
+    await user.click(await screen.findByText("进行中"))
+    await user.click(screen.getByText("已暂停"))
     fireEvent.click(screen.getByRole("button", { name: "保存" }))
     await waitFor(() =>
       expect(mockedUpdateProject).toHaveBeenCalledWith("p-api", { description: "d", status: "paused" }),
@@ -142,11 +181,12 @@ describe("App (v5 agent homepage)", () => {
     await user.click(await screen.findByTitle("设置"))
     await user.click(screen.getByText("项目设置"))
     fireEvent.click(await screen.findByRole("button", { name: "删除项目" }))
-    fireEvent.click(screen.getByRole("button", { name: "确认删除？" }))
+    fireEvent.click(await screen.findByRole("button", { name: "确认删除" }))
     // 当前选中的是最新项目 p-b
     await waitFor(() => expect(mockedDeleteProject).toHaveBeenCalledWith("p-b"))
-    // 回落到剩余第一项
+    // 回落到剩余第一项；被删项目消失
     await waitFor(() => expect(screen.getAllByText("Alpha").length).toBeGreaterThan(0))
+    expect(screen.queryByText("Beta")).not.toBeInTheDocument()
   })
 })
 
@@ -154,25 +194,37 @@ describe("App creation flows", () => {
   afterEach(() => vi.clearAllMocks())
 
   it("creates a project via switcher menu and switches to it", async () => {
+    mockedCreateProject.mockResolvedValue({
+      id: "p-new",
+      name: "Merchant Portal",
+      description: "",
+      status: "active",
+      workspacePath: "~/r/MP",
+      workspaceId: "w",
+      createdAt: "2026-08-27T00:00:00.000Z",
+    })
     const user = userEvent.setup()
     render(<App />)
     await user.click(screen.getByTestId("project-switcher"))
-    await user.click(screen.getByText("新建项目"))
+    await user.click(screen.getByRole("menuitem", { name: "新建项目" }))
     fireEvent.change(screen.getByPlaceholderText(/例如：Octopus Platform/), {
       target: { value: "Merchant Portal" },
     })
     await user.click(screen.getByRole("button", { name: "创建项目" }))
-    // 自动切换到新项目
-    expect(screen.getByText("未排期")).toBeInTheDocument()
+    // 走真实 POST
+    expect(mockedCreateProject).toHaveBeenCalledWith({ name: "Merchant Portal", description: "" })
+    // 自动切换到新项目：项目条出现
+    expect(await screen.findByText("本周任务")).toBeInTheDocument()
     // 切换器列表中出现新项目
     await user.click(screen.getByTestId("project-switcher"))
     expect(screen.getAllByText("Merchant Portal").length).toBeGreaterThan(0)
   })
 
   it("creates a requirement via strip button and shows it in drawer", async () => {
+    mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole("button", { name: /新建需求/ }))
+    await user.click(await screen.findByRole("button", { name: /新建需求/ }))
     fireEvent.change(screen.getByPlaceholderText(/多租户权限体系升级/), {
       target: { value: "品牌全新的需求条目" },
     })
@@ -183,9 +235,10 @@ describe("App creation flows", () => {
   })
 
   it("creates a task via kanban drawer and shows it in 待处理", async () => {
+    mockedFetchProjects.mockResolvedValue([apiProject])
     const user = userEvent.setup()
     render(<App />)
-    await user.click(screen.getByRole("button", { name: /任务看板/ }))
+    await user.click(await screen.findByRole("button", { name: /任务看板/ }))
     await user.click(await screen.findByRole("button", { name: /新建任务/ }))
     fireEvent.change(screen.getByPlaceholderText(/导出报表支持 CSV/), {
       target: { value: "看板里冒出来的新任务" },

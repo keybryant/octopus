@@ -1,5 +1,4 @@
 ﻿import {
-  Badge,
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -13,7 +12,7 @@ import { OctoLogo } from "./OctoLogo"
 
 export interface TopBarProps {
   projects: ProjectSummary[]
-  currentProjectId: string
+  currentProjectId?: string
   onSwitchProject: (id: string) => void
   onOpenNewProject: () => void
   onOpenProjectSettings: () => void
@@ -44,9 +43,9 @@ export function TopBar({
           className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-colors duration-fast hover:bg-surface"
         >
           <span className="flex h-6 w-6 items-center justify-center rounded-md border border-border-strong bg-surface-hover font-mono text-[10px] text-muted-foreground">
-            {current.shortName}
+            {current?.shortName ?? "—"}
           </span>
-          <span className="text-sm font-semibold">{current.name}</span>
+          <span className="text-sm font-semibold">{current ? current.name : "无项目"}</span>
           <ChevronDown className="h-3.5 w-3.5 text-text-faint" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-[320px]">
@@ -70,7 +69,7 @@ export function TopBar({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium">{p.name}</span>
                   <span className="block truncate text-[11px] text-text-faint">
-                    {p.description.split(" · ")[0]} · {p.iteration.split(" · ")[0]}
+                    {p.description.split(" · ")[0]}
                   </span>
                 </span>
                 {isCurrent && <Check className="h-4 w-4 text-accent" />}
@@ -85,8 +84,6 @@ export function TopBar({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Badge tone="success">{current.iteration}</Badge>
-
       <span className="flex-1" />
 
       {/* 设置 */}
@@ -95,12 +92,16 @@ export function TopBar({
           <Settings className="h-[18px] w-[18px]" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-[240px]">
-          <DropdownMenuLabel>本项目</DropdownMenuLabel>
-          <DropdownMenuItem onSelect={onOpenProjectSettings}>项目设置</DropdownMenuItem>
-          <DropdownMenuItem>成员与权限</DropdownMenuItem>
-          <DropdownMenuItem>仓库与集成</DropdownMenuItem>
-          <DropdownMenuItem>自动化规则</DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {current && (
+            <>
+              <DropdownMenuLabel>本项目</DropdownMenuLabel>
+              <DropdownMenuItem onSelect={onOpenProjectSettings}>项目设置</DropdownMenuItem>
+              <DropdownMenuItem>成员与权限</DropdownMenuItem>
+              <DropdownMenuItem>仓库与集成</DropdownMenuItem>
+              <DropdownMenuItem>自动化规则</DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuLabel>全局</DropdownMenuLabel>
           <DropdownMenuItem>工作区偏好</DropdownMenuItem>
           <DropdownMenuItem>通知设置</DropdownMenuItem>
