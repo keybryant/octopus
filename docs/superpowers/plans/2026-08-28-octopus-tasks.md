@@ -2107,12 +2107,11 @@ export interface TaskBoardProps {
   onMove: (id: string, status: TaskStatus) => Promise<void> | void
 }
 
-function ColumnBody({ column, tasks, busyIds, onMove, draggingId, dragOver, setDragOver }: {
+function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
   column: ColumnSpec
   tasks: TaskRecord[]
   busyIds: ReadonlySet<string>
   onMove: (id: string, status: TaskStatus) => Promise<void> | void
-  draggingId: string | null
   dragOver: TaskStatus | null
   setDragOver: (s: TaskStatus | null) => void
 }) {
@@ -2129,7 +2128,7 @@ function ColumnBody({ column, tasks, busyIds, onMove, draggingId, dragOver, setD
         e.preventDefault()
         setDragOver(null)
         const id = e.dataTransfer.getData("text/plain")
-        if (id && column.key !== draggingId) void onMove(id, column.key)
+        if (id) void onMove(id, column.key)
       }}
       role="group"
       aria-label={column.label}
@@ -2185,7 +2184,6 @@ function ColumnBody({ column, tasks, busyIds, onMove, draggingId, dragOver, setD
 
 /** 任务看板：4 列 + 原生 HTML5 拖拽（跨列迁态，列内按创建序） */
 export function TaskBoard({ tasks, busyIds, onMove }: TaskBoardProps) {
-  const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState<TaskStatus | null>(null)
 
   return (
@@ -2197,7 +2195,6 @@ export function TaskBoard({ tasks, busyIds, onMove }: TaskBoardProps) {
           tasks={tasks.filter((t) => t.status === column.key)}
           busyIds={busyIds}
           onMove={onMove}
-          draggingId={draggingId}
           dragOver={dragOver}
           setDragOver={setDragOver}
         />
@@ -2210,7 +2207,7 @@ export function TaskBoard({ tasks, busyIds, onMove }: TaskBoardProps) {
 - [ ] **Step 2: 用完整模块替换 web/src/index.tsx（载荷消费留到 Task 10，先只做看板三态 + 乐观拖拽）**
 
 ```tsx
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Button, Spinner } from "octopus-ui"
 import { listTasks, updateTask } from "./api"
 import { TaskBoard } from "./components/TaskBoard"
@@ -2264,11 +2261,6 @@ export default function TasksModule() {
     [tasks],
   )
 
-  const grouped = useMemo(
-    () => tasks.map((t) => (t.assignee === null ? t : t)),
-    [tasks],
-  )
-
   return (
     <section className="p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -2291,7 +2283,7 @@ export default function TasksModule() {
           </div>
         </div>
       ) : (
-        <TaskBoard tasks={grouped} busyIds={busyIds} onMove={handleMove} />
+        <TaskBoard tasks={tasks} busyIds={busyIds} onMove={handleMove} />
       )}
     </section>
   )
