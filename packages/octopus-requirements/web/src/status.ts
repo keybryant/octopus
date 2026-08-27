@@ -14,8 +14,8 @@ export const STATUS_ORDER: RequirementStatus[] = ["backlog", "planned", "in-prog
 
 export const TRANSITIONS: Record<RequirementStatus, readonly RequirementStatus[]> = {
   backlog: ["planned"],
-  planned: ["backlog", "in-progress"],
-  "in-progress": ["planned", "review"],
-  review: ["in-progress", "done"],
+  planned: ["in-progress"],
+  "in-progress": ["review"],
+  review: ["done"],
   done: [],
 }

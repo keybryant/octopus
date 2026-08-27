@@ -83,6 +83,16 @@ describe("RequirementStore", () => {
     expect(store.get("REQ-999")).toBeUndefined()
   })
 
+  it("list 支持先过滤后排序（数值 id 序）", async () => {
+    await store.create({ title: "A", priority: "P1" })
+    await store.create({ title: "B", priority: "P0" })
+    await store.create({ title: "C", priority: "P2" })
+
+    const filtered = store.list((r) => r.priority === "P0" || r.priority === "P2")
+    expect(filtered.map((r) => r.id)).toEqual(["REQ-101", "REQ-102"])
+    expect(store.list().map((r) => r.id)).toEqual(["REQ-100", "REQ-101", "REQ-102"])
+  })
+
   it("update 支持字段修改与合法状态迁移", async () => {
     const req = await store.create({ title: "A" })
 
@@ -111,6 +121,25 @@ describe("RequirementStore", () => {
     })
     // 状态未被污染
     expect(store.get(req.id)?.status).toBe("backlog")
+  })
+
+  it("update 拒绝回退迁移", async () => {
+    const req = await store.create({ title: "A" })
+    await store.update(req.id, { status: "planned" })
+    await expect(store.update(req.id, { status: "backlog" })).rejects.toMatchObject({
+      code: "invalid-transition",
+    })
+    expect(store.get(req.id)?.status).toBe("planned")
+  })
+
+  it("update 拒绝空标题和空更新", async () => {
+    const req = await store.create({ title: "A" })
+    await expect(store.update(req.id, { title: "   " })).rejects.toMatchObject({
+      code: "invalid-input",
+    })
+    await expect(store.update(req.id, {})).rejects.toMatchObject({
+      code: "invalid-input",
+    })
   })
 
   it("update 不存在的 id 抛 not-found", async () => {

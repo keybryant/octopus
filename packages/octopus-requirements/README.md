@@ -5,7 +5,7 @@ octopus 工作台的功能插件：**需求管理**。提供需求 CRUD、状态
 ## 功能
 
 - 需求列表：编号 / 标题 / 描述 / 优先级（P0-P2）/ 状态 / 负责人 / 创建时间
-- 新建需求（标题必填，描述与优先级可选）
+- 新建 / 编辑需求（标题必填，描述、优先级、负责人可选；同一弹窗复用）
 - 状态流转（DropdownMenu）：backlog → planned → in-progress → review → done，done 为终态
 - 按状态筛选、删除（带确认）
 - 数据持久化：基于 dsh 的 storage 域（ctx.storageDomain，json 后端，~/.dsh/storages/octopus_requirements.json）
@@ -36,7 +36,9 @@ web/
 | PATCH | /api/octopus-requirements/requirements/:id | 更新（含状态机校验，非法迁移 422） |
 | DELETE | /api/octopus-requirements/requirements/:id | 删除（幂等） |
 
-错误码：not-found(404)、invalid-input(400)、invalid-transition(422)、invalid-json(400)、method-not-allowed(405)。
+错误码：not-found(404)、invalid-input(400)、invalid-transition(422)、invalid-json(400)、bad-request(400)、payload-too-large(413，请求体超 256KiB)、method-not-allowed(405)。
+
+注意：POST 的 source 字段由服务端固定为 manual（预留 chat 工具使用），客户端传入会被忽略。
 
 ## 开发
 

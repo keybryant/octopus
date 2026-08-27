@@ -51,12 +51,12 @@ export class RequirementsError extends Error {
   }
 }
 
-/** 合法状态迁移表：done 为终态，不可回退 */
+/** 合法状态迁移表：按设计为单向推进，done 为终态，不可回退 */
 export const REQUIREMENT_TRANSITIONS: Record<RequirementStatus, readonly RequirementStatus[]> = {
   backlog: ["planned"],
-  planned: ["backlog", "in-progress"],
-  "in-progress": ["planned", "review"],
-  review: ["in-progress", "done"],
+  planned: ["in-progress"],
+  "in-progress": ["review"],
+  review: ["done"],
   done: [],
 }
 

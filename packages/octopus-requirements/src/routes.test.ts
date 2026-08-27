@@ -8,6 +8,7 @@ import * as JsonStorage from "@deepseek-ai/dsh-storage-json"
 import * as DomainStorage from "@deepseek-ai/dsh-storage-domain"
 import {
   createRequirementApiHandler,
+  MAX_BODY_SIZE,
   parseCreateInput,
   parsePatchInput,
   REQUIREMENTS_PATH,
@@ -58,7 +59,6 @@ describe("parseCreateInput / parsePatchInput", () => {
       title: "A",
       description: "d",
       priority: "P0",
-      source: "chat",
     })
     expect(parseCreateInput({ title: "B" })).toEqual({ title: "B" })
   })
@@ -75,6 +75,12 @@ describe("parseCreateInput / parsePatchInput", () => {
       owner: null,
     })
     expect(() => parsePatchInput({ status: "bogus" })).toThrowError(/status/)
+  })
+
+  it("parsePatchInput 拒绝空标题和空更新", () => {
+    expect(() => parsePatchInput({ title: "   " })).toThrowError(/title is required/)
+    expect(() => parsePatchInput({})).toThrowError(/no fields to update/)
+    expect(() => parsePatchInput([])).toThrowError(/object/)
   })
 })
 
@@ -98,7 +104,7 @@ describe("requirement REST API", () => {
     return { res, body: JSON.parse(res.calls[0].body) }
   }
 
-  it("POST 创建需求返回 201", async () => {
+  it("POST 创建需求返回 201，source 由服务端固定为 manual", async () => {
     const { res, body } = await call("POST", REQUIREMENTS_PATH, {
       title: "OAuth 2.0 重构",
       description: "认证模块",
@@ -112,7 +118,7 @@ describe("requirement REST API", () => {
       title: "OAuth 2.0 重构",
       priority: "P0",
       status: "backlog",
-      source: "chat",
+      source: "manual",
     })
   })
 
@@ -126,6 +132,37 @@ describe("requirement REST API", () => {
     const { res, body } = await call("POST", REQUIREMENTS_PATH, { priority: "P0" })
     expect(res.calls[0].status).toBe(400)
     expect(body.error.code).toBe("invalid-input")
+  })
+
+  it("POST 请求体超过大小上限返回 413", async () => {
+    const res = createRes()
+    await handler(createReq("POST", REQUIREMENTS_PATH, JSON.stringify({ title: "x".repeat(MAX_BODY_SIZE + 1) })), res)
+    const body = JSON.parse(res.calls[0].body)
+    expect(res.calls[0].status).toBe(413)
+    expect(body.error.code).toBe("payload-too-large")
+  })
+
+  it("POST 请求体不可异步迭代返回 400", async () => {
+    const res = createRes()
+    // 无 Symbol.asyncIterator 的伪请求（模拟非 IncomingMessage 场景）
+    await handler({ method: "POST", url: REQUIREMENTS_PATH } as never, res)
+    const body = JSON.parse(res.calls[0].body)
+    expect(res.calls[0].status).toBe(400)
+    expect(body.error.code).toBe("bad-request")
+  })
+
+  it("500 响应不泄露内部错误信息", async () => {
+    const broken = createRequirementApiHandler({
+      list: () => {
+        throw new Error("secret-detail")
+      },
+    } as never)
+    const res = createRes()
+    await broken(createReq("GET", REQUIREMENTS_PATH), res)
+    const body = JSON.parse(res.calls[0].body)
+    expect(res.calls[0].status).toBe(500)
+    expect(body.error.code).toBe("internal")
+    expect(JSON.stringify(body)).not.toContain("secret-detail")
   })
 
   it("GET 列表 + status/priority 过滤", async () => {
@@ -169,6 +206,27 @@ describe("requirement REST API", () => {
 
     const missing = await call("PATCH", REQUIREMENTS_PATH + "/REQ-999", { title: "x" })
     expect(missing.res.calls[0].status).toBe(404)
+  })
+
+  it("PATCH 拒绝空标题与空更新", async () => {
+    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+
+    const emptyTitle = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { title: "   " })
+    expect(emptyTitle.res.calls[0].status).toBe(400)
+    expect(emptyTitle.body.error.code).toBe("invalid-input")
+
+    const emptyPatch = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", {})
+    expect(emptyPatch.res.calls[0].status).toBe(400)
+    expect(emptyPatch.body.error.code).toBe("invalid-input")
+  })
+
+  it("PATCH 拒绝回退迁移", async () => {
+    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "planned" })
+
+    const backward = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "backlog" })
+    expect(backward.res.calls[0].status).toBe(422)
+    expect(backward.body.error.code).toBe("invalid-transition")
   })
 
   it("DELETE 幂等：200 true / 200 false", async () => {

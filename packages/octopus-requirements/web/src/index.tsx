@@ -15,15 +15,23 @@ const FILTERS: { value: Filter; label: string }[] = [
   ...STATUS_ORDER.map((s) => ({ value: s as Filter, label: STATUS_META[s].label })),
 ]
 
+function compareRequirements(a: RequirementRecord, b: RequirementRecord): number {
+  const na = Number(a.id.slice(4))
+  const nb = Number(b.id.slice(4))
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb
+  return a.id.localeCompare(b.id)
+}
+
 /** workbench 模块：需求管理 */
 export default function RequirementsModule() {
   const [requirements, setRequirements] = useState<RequirementRecord[]>([])
   const [filter, setFilter] = useState<Filter>("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [createOpen, setCreateOpen] = useState(false)
-  const [creating, setCreating] = useState(false)
-  const [busyId, setBusyId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editing, setEditing] = useState<RequirementRecord | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -41,40 +49,94 @@ export default function RequirementsModule() {
     void load()
   }, [load])
 
+  const openCreate = () => {
+    setEditing(null)
+    setModalOpen(true)
+  }
+
+  const openEdit = (record: RequirementRecord) => {
+    setEditing(record)
+    setModalOpen(true)
+  }
+
+  const closeModal = () => {
+    if (submitting) return
+    setModalOpen(false)
+    setEditing(null)
+  }
+
   const handleCreate = async (input: NewRequirementInput) => {
-    setCreating(true)
+    setSubmitting(true)
+    setError(null)
     try {
-      await createRequirement(input)
-      await load()
+      const created = await createRequirement({
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+      })
+      setRequirements((prev) => [...prev, created].sort(compareRequirements))
+      setModalOpen(false)
+      setEditing(null)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setCreating(false)
+      setSubmitting(false)
+    }
+  }
+
+  const handleUpdate = async (input: NewRequirementInput) => {
+    if (!editing) return
+    setSubmitting(true)
+    setError(null)
+    try {
+      const updated = await updateRequirement(editing.id, {
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+        owner: input.owner || null,
+      })
+      setRequirements((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+      setModalOpen(false)
+      setEditing(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setSubmitting(false)
     }
   }
 
   const handleStatusChange = async (id: string, status: RequirementStatus) => {
-    setBusyId(id)
+    setBusyIds((prev) => new Set(prev).add(id))
+    setError(null)
     try {
-      await updateRequirement(id, { status })
-      setRequirements((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)))
+      const updated = await updateRequirement(id, { status })
+      setRequirements((prev) => prev.map((r) => (r.id === id ? updated : r)))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusyId(null)
+      setBusyIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!window.confirm(`确定删除需求 ${id}？`)) return
-    setBusyId(id)
+    setBusyIds((prev) => new Set(prev).add(id))
+    setError(null)
     try {
       await removeRequirement(id)
       setRequirements((prev) => prev.filter((r) => r.id !== id))
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
-      setBusyId(null)
+      setBusyIds((prev) => {
+        const next = new Set(prev)
+        next.delete(id)
+        return next
+      })
     }
   }
 
@@ -89,7 +151,7 @@ export default function RequirementsModule() {
         <h2 className="text-base font-semibold">需求管理</h2>
         <span className="text-xs text-text-faint">共 {requirements.length} 条</span>
         <span className="flex-1" />
-        <Button variant="primary" size="sm" onClick={() => setCreateOpen(true)}>
+        <Button variant="primary" size="sm" onClick={openCreate}>
           <Plus className="h-3.5 w-3.5" />
           新建需求
         </Button>
@@ -130,15 +192,17 @@ export default function RequirementsModule() {
           requirements={filtered}
           onStatusChange={handleStatusChange}
           onDelete={handleDelete}
-          busyId={busyId}
+          onEdit={openEdit}
+          busyIds={busyIds}
         />
       )}
 
       <NewRequirementModal
-        open={createOpen}
-        submitting={creating}
-        onClose={() => setCreateOpen(false)}
-        onCreate={handleCreate}
+        open={modalOpen}
+        initial={editing}
+        submitting={submitting}
+        onClose={closeModal}
+        onSubmit={editing ? handleUpdate : handleCreate}
       />
     </section>
   )

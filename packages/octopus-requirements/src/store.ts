@@ -41,10 +41,16 @@ export class RequirementStore {
     }
   }
 
-  list(): RequirementRecord[] {
+  list(filter?: (record: RequirementRecord) => boolean): RequirementRecord[] {
     return [...this.domain.table(REQ_TABLE).entries()]
       .map(([, record]) => record)
-      .sort((a, b) => a.id.localeCompare(b.id))
+      .filter((record) => filter?.(record) ?? true)
+      .sort((a, b) => {
+        const na = Number(a.id.slice(4))
+        const nb = Number(b.id.slice(4))
+        if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb
+        return a.id.localeCompare(b.id)
+      })
   }
 
   get(id: string): RequirementRecord | undefined {
@@ -79,12 +85,20 @@ export class RequirementStore {
     if (!this.domain.table(REQ_TABLE).get(id)) {
       throw new RequirementsError("not-found", `requirement ${id} not found`)
     }
+    if (Object.keys(patch).length === 0) {
+      throw new RequirementsError("invalid-input", "no fields to update")
+    }
+    if (patch.title !== undefined && !patch.title.trim()) {
+      throw new RequirementsError("invalid-input", "title is required")
+    }
     const table = this.domain.table(REQ_TABLE)
     return table.update(id, (current) => {
       if (patch.status !== undefined && patch.status !== current.status) {
         assertTransition(current.status, patch.status)
       }
-      return { ...current, ...patch, updatedAt: new Date().toISOString() }
+      const next: RequirementRecord = { ...current, ...patch, updatedAt: new Date().toISOString() }
+      if (patch.title !== undefined) next.title = patch.title.trim()
+      return next
     })
   }
 

@@ -7,7 +7,6 @@ import {
   type Priority,
   type RequirementInput,
   type RequirementPatch,
-  type RequirementSource,
   type RequirementStatus,
 } from "./types.js"
 
@@ -28,11 +27,24 @@ class ApiError extends Error {
   }
 }
 
-/** 读取请求体并解析 JSON；空 body 返回 undefined；非法 JSON 抛 400 */
+/** 请求体大小上限：超过直接 413，防止整包读入内存 */
+export const MAX_BODY_SIZE = 256 * 1024
+
+/** 读取请求体并解析 JSON；空 body 返回 undefined；非法 JSON 抛 400；超限抛 413 */
 export async function readJsonBody(req: HttpRequest): Promise<unknown> {
+  const source = req as unknown as AsyncIterable<Buffer | string>
+  if (typeof source[Symbol.asyncIterator] !== "function") {
+    throw new ApiError(400, "bad-request", "request body is not a readable stream")
+  }
   const chunks: Buffer[] = []
-  for await (const chunk of req as unknown as AsyncIterable<Buffer>) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  let total = 0
+  for await (const chunk of source) {
+    const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    total += buf.length
+    if (total > MAX_BODY_SIZE) {
+      throw new ApiError(413, "payload-too-large", `request body exceeds ${MAX_BODY_SIZE} bytes`)
+    }
+    chunks.push(buf)
   }
   if (chunks.length === 0) return undefined
   const raw = Buffer.concat(chunks).toString("utf8")
@@ -82,13 +94,9 @@ function isPriority(value: unknown): value is Priority {
   return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
 }
 
-function isSource(value: unknown): value is RequirementSource {
-  return value === "manual" || value === "chat"
-}
-
 /** 校验并归一化创建入参（多余字段忽略） */
 export function parseCreateInput(body: unknown): RequirementInput {
-  if (typeof body !== "object" || body === null) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new ApiError(400, "invalid-input", "request body must be a JSON object")
   }
   const raw = body as Record<string, unknown>
@@ -104,22 +112,21 @@ export function parseCreateInput(body: unknown): RequirementInput {
     if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
     input.priority = raw.priority
   }
-  if (raw.source !== undefined) {
-    if (!isSource(raw.source)) throw new ApiError(400, "invalid-input", "source must be manual or chat")
-    input.source = raw.source
-  }
+  // source 为服务端保留字段（chat 工具后续创建时使用），客户端不可指定
   return input
 }
 
 /** 校验并归一化更新入参 */
 export function parsePatchInput(body: unknown): RequirementPatch {
-  if (typeof body !== "object" || body === null) {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new ApiError(400, "invalid-input", "request body must be a JSON object")
   }
   const raw = body as Record<string, unknown>
   const patch: RequirementPatch = {}
   if (raw.title !== undefined) {
-    if (typeof raw.title !== "string") throw new ApiError(400, "invalid-input", "title must be a string")
+    if (typeof raw.title !== "string" || !raw.title.trim()) {
+      throw new ApiError(400, "invalid-input", "title is required")
+    }
     patch.title = raw.title
   }
   if (raw.description !== undefined) {
@@ -139,6 +146,9 @@ export function parsePatchInput(body: unknown): RequirementPatch {
       throw new ApiError(400, "invalid-input", "owner must be a string or null")
     }
     patch.owner = raw.owner
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new ApiError(400, "invalid-input", "no fields to update")
   }
   return patch
 }
@@ -171,7 +181,8 @@ export function createRequirementApiHandler(store: RequirementStore): RouteHandl
         const status = error.code === "not-found" ? 404 : error.code === "invalid-transition" ? 422 : 400
         fail(res, status, error.code, error.message)
       } else {
-        fail(res, 500, "internal", error instanceof Error ? error.message : String(error))
+        console.error("[octopus-requirements] internal error", error)
+        fail(res, 500, "internal", "internal server error")
       }
     }
   }
@@ -184,7 +195,7 @@ async function dispatch(store: RequirementStore, req: HttpRequest, res: HttpResp
   if (pathname === REQUIREMENTS_PATH) {
     if (method === "GET") {
       const { status, priority } = listQuery(req)
-      ok(res, store.list().filter((r) => (status === undefined || r.status === status) && (priority === undefined || r.priority === priority)))
+      ok(res, store.list((r) => (status === undefined || r.status === status) && (priority === undefined || r.priority === priority)))
       return
     }
     if (method === "POST") {

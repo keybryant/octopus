@@ -32,4 +32,5 @@ export {
   History,
   ShieldCheck,
   Trash2,
+  Pencil,
 } from "lucide-react"

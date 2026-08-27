@@ -70,13 +70,25 @@ describe("RequirementsModule", () => {
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
   })
 
-  it("新建流程：打开弹窗提交后刷新列表", async () => {
+  it("新建流程：打开弹窗提交后插入列表", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockResponse(200, { ok: true, data: RECORDS }))
-      .mockResolvedValueOnce(mockResponse(201, { ok: true, data: { id: "REQ-102", title: "新需求" } }))
       .mockResolvedValueOnce(
-        mockResponse(200, { ok: true, data: [RECORDS[0], RECORDS[1], { ...RECORDS[0], id: "REQ-102", title: "新需求" }] }),
+        mockResponse(201, {
+          ok: true,
+          data: {
+            id: "REQ-102",
+            title: "新需求",
+            description: "",
+            priority: "P2",
+            status: "backlog",
+            owner: null,
+            source: "manual",
+            createdAt: "2026-08-27T09:00:00.000Z",
+            updatedAt: "2026-08-27T09:00:00.000Z",
+          },
+        }),
       )
     vi.stubGlobal("fetch", fetchMock)
     render(<RequirementsModule />)
@@ -90,6 +102,34 @@ describe("RequirementsModule", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/octopus-requirements/requirements",
       expect.objectContaining({ method: "POST" }),
+    )
+  })
+
+  it("编辑流程：打开编辑弹窗提交后更新列表", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: RECORDS }))
+      .mockResolvedValueOnce(
+        mockResponse(200, {
+          ok: true,
+          data: { ...RECORDS[0], title: "OAuth 2.0 重构 v2", owner: "李四" },
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    render(<RequirementsModule />)
+    await screen.findByText("OAuth 2.0 重构")
+
+    await userEvent.click(screen.getByRole("button", { name: "编辑 REQ-100" }))
+    const titleInput = screen.getByPlaceholderText(/多租户权限体系升级/)
+    await userEvent.clear(titleInput)
+    await userEvent.type(titleInput, "OAuth 2.0 重构 v2")
+    await userEvent.click(screen.getByRole("button", { name: "保存修改" }))
+
+    await waitFor(() => expect(screen.getByText("OAuth 2.0 重构 v2")).toBeInTheDocument())
+    expect(screen.getByText("李四")).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/octopus-requirements/requirements/REQ-100",
+      expect.objectContaining({ method: "PATCH" }),
     )
   })
 

@@ -1,5 +1,5 @@
 import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "octopus-ui"
-import { Trash2 } from "octopus-ui"
+import { Pencil, Trash2 } from "octopus-ui"
 import { STATUS_META, TRANSITIONS } from "../status"
 import type { Priority, RequirementRecord, RequirementStatus } from "../types"
 
@@ -13,10 +13,11 @@ export interface RequirementsTableProps {
   requirements: RequirementRecord[]
   onStatusChange: (id: string, status: RequirementStatus) => Promise<void> | void
   onDelete: (id: string) => Promise<void> | void
-  busyId: string | null
+  onEdit: (record: RequirementRecord) => void
+  busyIds: ReadonlySet<string>
 }
 
-export function RequirementsTable({ requirements, onStatusChange, onDelete, busyId }: RequirementsTableProps) {
+export function RequirementsTable({ requirements, onStatusChange, onDelete, onEdit, busyIds }: RequirementsTableProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-border">
       <table className="w-full text-[13px]">
@@ -35,7 +36,7 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, busy
           {requirements.map((r) => {
             const meta = STATUS_META[r.status]
             const targets = TRANSITIONS[r.status]
-            const busy = busyId === r.id
+            const busy = busyIds.has(r.id)
             return (
               <tr key={r.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-surface">
                 <td className="px-4 py-3.5 font-mono text-xs text-text-faint">{r.id}</td>
@@ -76,6 +77,15 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, busy
                   {new Date(r.createdAt).toLocaleDateString()}
                 </td>
                 <td className="px-4 py-3.5 text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    aria-label={`编辑 ${r.id}`}
+                    onClick={() => onEdit(r)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                   <Button
                     variant="ghost"
                     size="sm"

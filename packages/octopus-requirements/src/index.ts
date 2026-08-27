@@ -12,11 +12,12 @@ const HERE = dirname(fileURLToPath(import.meta.url))
 const DIST_DIR = join(HERE, "..", "web", "dist")
 
 /** 功能插件：需求管理（模块注册 + REST API + 前端 bundle 托管） */
-export async function apply(ctx: Context) {
-  // 打开需求域（storage-domain 层：内存读 + 写链 + 持久化）
-  const store = await RequirementStore.open(ctx)
+export function apply(ctx: Context) {
+  // 打开需求域（storage-domain 层：内存读 + 写链 + 持久化）与资源注册、关闭
+  // 统一放进 effect：插件被 dispose 时异步清理会被等待，避免资源泄漏
+  ctx.effect(async () => {
+    const store = await RequirementStore.open(ctx)
 
-  ctx.effect(() => {
     const disposers: (() => void)[] = [
       ctx.workbench.register({
         id: "requirements",
@@ -35,9 +36,11 @@ export async function apply(ctx: Context) {
         handler: serveStaticFiles(DIST_DIR, "/octopus/requirements/assets"),
       }),
     ]
-    return () => {
+    return async () => {
       for (const dispose of disposers) dispose()
-      void store.close()
+      await store.close().catch((error) => {
+        console.error("[octopus-requirements] failed to close store", error)
+      })
     }
   })
 }
