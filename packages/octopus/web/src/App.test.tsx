@@ -3,13 +3,14 @@ import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import App from "./App"
-import { fetchConfig } from "./api"
+import { fetchConfig, fetchModules } from "./api"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
   fetchModules: vi.fn().mockResolvedValue([]),
 }))
 const mockedFetchConfig = vi.mocked(fetchConfig)
+const mockedFetchModules = vi.mocked(fetchModules)
 
 describe("App (v5 agent homepage)", () => {
   afterEach(() => {
@@ -23,6 +24,17 @@ describe("App (v5 agent homepage)", () => {
       expect(screen.getByText(/当前上下文：Octopus Platform · 迭代 4.2/)).toBeInTheDocument(),
     )
     expect(mockedFetchConfig).toHaveBeenCalled()
+  })
+
+  it("opens modules drawer showing plugin-registered module cards", async () => {
+    mockedFetchModules.mockResolvedValue([
+      { id: "requirements", title: "需求管理", entry: "/octopus/requirements/assets/index.js" },
+    ])
+    const user = userEvent.setup()
+    render(<App />)
+    await user.click(screen.getByRole("button", { name: /已装模块/ }))
+    expect(await screen.findByText("需求管理")).toBeInTheDocument()
+    expect(mockedFetchModules).toHaveBeenCalled()
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {

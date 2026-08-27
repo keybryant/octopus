@@ -1,10 +1,11 @@
 import { Button } from "octopus-ui"
-import { Columns3 } from "octopus-ui"
+import { Blocks, Columns3 } from "octopus-ui"
 import type { ProjectSummary } from "../lib/types"
 
 export interface ProjectStripProps {
   summary: ProjectSummary
   onOpenKanban: () => void
+  onOpenModules: () => void
 }
 
 interface MetricProps {
@@ -27,7 +28,7 @@ function Metric({ value, suffix, label, warn }: MetricProps) {
   )
 }
 
-export function ProjectStrip({ summary, onOpenKanban }: ProjectStripProps) {
+export function ProjectStrip({ summary, onOpenKanban, onOpenModules }: ProjectStripProps) {
   return (
     <section className="flex h-14 shrink-0 items-center gap-6 border-b border-border bg-background px-6">
       <Metric value={summary.weeklyDone} suffix={`/${summary.weeklyTotal}`} label="本周任务" />
@@ -37,6 +38,10 @@ export function ProjectStrip({ summary, onOpenKanban }: ProjectStripProps) {
 
       <span className="flex-1" />
 
+      <Button variant="ghost" size="sm" onClick={onOpenModules}>
+        <Blocks className="h-3.5 w-3.5" />
+        已装模块
+      </Button>
       <Button variant="ghost" size="sm" onClick={onOpenKanban}>
         <Columns3 className="h-3.5 w-3.5" />
         任务看板

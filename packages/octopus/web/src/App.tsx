@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { ThemeProvider } from "octopus-ui"
-import { fetchConfig, type WorkbenchConfig } from "./api"
+import { fetchConfig, fetchModules, type WorkbenchConfig, type WorkbenchModuleInfo } from "./api"
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
+import { ModulesDrawer } from "./components/ModulesDrawer"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { ProjectStrip } from "./components/ProjectStrip"
 import { TopBar } from "./components/TopBar"
@@ -11,12 +12,14 @@ import { createDefaultAgentClient, KANBAN_COLUMNS, PROJECTS } from "./lib/dataso
 import { deriveShortName } from "./lib/short-name"
 import type { Artifact, KanbanColumn, KanbanTask, ProjectSummary } from "./lib/types"
 
-type DrawerKind = "tasks" | null
+type DrawerKind = "tasks" | "modules" | null
 
 export default function App() {
   const [config, setConfig] = useState<WorkbenchConfig | null>(null)
+  const [modules, setModules] = useState<WorkbenchModuleInfo[]>([])
   useEffect(() => {
     void fetchConfig().then(setConfig)
+    void fetchModules().then(setModules)
   }, [])
 
   // ── 项目域状态（mock 数据源 + 本会话新增）──
@@ -74,6 +77,7 @@ export default function App() {
         <ProjectStrip
           summary={current}
           onOpenKanban={() => setDrawer("tasks")}
+          onOpenModules={() => setDrawer("modules")}
         />
 
         <div className="flex min-h-0 flex-1">
@@ -91,6 +95,12 @@ export default function App() {
           onClose={() => setDrawer(null)}
           columns={columns}
           onCreateTask={handleCreateTask}
+        />
+
+        <ModulesDrawer
+          open={drawer === "modules"}
+          onClose={() => setDrawer(null)}
+          modules={modules}
         />
 
         <NewProjectModal
