@@ -49,6 +49,15 @@ describe("octopus-auth apply", () => {
     expect(res.calls[0].status).toBe(401)
   })
 
+  it("logout：无 Origin 拒绝 403", async () => {
+    const { routes } = setup()
+    const res = createRes()
+    await routes.get("exact /api/octopus-auth/logout")!.handler(
+      { method: "POST", url: "/api/octopus-auth/logout", headers: { host: "localhost" } } as any, res,
+    )
+    expect(res.calls[0].status).toBe(403)
+  })
+
   it("登录页公开且 needsSetup 动态渲染", async () => {
     const { users, routes } = setup()
     const emptyRes = createRes()

@@ -128,6 +128,7 @@ export function apply(ctx: Context, partialConfig: Partial<AuthResolvedConfig> =
         path: "/api/octopus-auth/logout",
         handler: async (req, res) => {
           try {
+            assertSameOrigin(req)
             await authService.requireAuth(req)
             const { setCookie } = await authService.logout(req)
             sendJson(res, 200, { ok: true }, { "set-cookie": setCookie })
