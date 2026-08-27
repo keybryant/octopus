@@ -87,6 +87,42 @@ describe("TasksModule", () => {
     expect(within(doingCol).queryByText("导出 CSV")).not.toBeInTheDocument()
   })
 
+  it("跨卡并发：A 失败回滚只还原 A，不吞掉 B 的成功迁移", async () => {
+    vi.stubGlobal("location", { ...window.location, search: "" })
+    let settleFirst!: (r: unknown) => void
+    const firstPatch = new Promise((resolve) => { settleFirst = resolve })
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: TASKS }))
+      .mockImplementationOnce(() => firstPatch)
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: { ...TASKS[1], status: "review" } }))
+    vi.stubGlobal("fetch", fetchMock)
+    render(<TasksModule />)
+    await screen.findByText("导出 CSV")
+
+    const todoCol = screen.getByRole("group", { name: "待处理" })
+    const doingCol = screen.getByRole("group", { name: "进行中" })
+    const reviewCol = screen.getByRole("group", { name: "评审中" })
+
+    const cardA = screen.getByText("导出 CSV").closest("[draggable=true]")!
+    const dtA = makeDataTransfer()
+    fireEvent.dragStart(cardA, { dataTransfer: dtA })
+    fireEvent.dragOver(doingCol, { dataTransfer: dtA })
+    fireEvent.drop(doingCol, { dataTransfer: dtA })
+    await waitFor(() => expect(within(doingCol).getByText("导出 CSV")).toBeInTheDocument())
+
+    const cardB = screen.getByText("联调测试").closest("[draggable=true]")!
+    const dtB = makeDataTransfer()
+    fireEvent.dragStart(cardB, { dataTransfer: dtB })
+    fireEvent.dragOver(reviewCol, { dataTransfer: dtB })
+    fireEvent.drop(reviewCol, { dataTransfer: dtB })
+    await waitFor(() => expect(within(reviewCol).getByText("联调测试")).toBeInTheDocument())
+
+    settleFirst(mockResponse(422, { ok: false, error: { code: "invalid-transition", message: "invalid status transition" } }))
+    await waitFor(() => expect(screen.getByText("invalid status transition")).toBeInTheDocument())
+    expect(within(todoCol).getByText("导出 CSV")).toBeInTheDocument()
+    expect(within(reviewCol).getByText("联调测试")).toBeInTheDocument()
+  })
+
   it("加载失败显示错误与重试", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(500, { ok: false, error: { code: "internal", message: "boom" } })))
     render(<TasksModule />)

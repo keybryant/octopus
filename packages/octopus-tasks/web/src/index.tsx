@@ -34,13 +34,13 @@ export default function TasksModule() {
     async (id: string, status: TaskStatus) => {
       setMoveError(null)
       setBusyIds((prev) => new Set(prev).add(id))
-      const prev = tasks
+      const prevTask = tasks.find((t) => t.id === id) ?? null
       setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status } : t)))
       try {
         const updated = await updateTask(id, { status })
         setTasks((ts) => ts.map((t) => (t.id === id ? updated : t)))
       } catch (e) {
-        setTasks(prev)
+        if (prevTask) setTasks((ts) => ts.map((t) => (t.id === id ? prevTask : t)))
         setMoveError(e instanceof Error ? e.message : String(e))
       } finally {
         setBusyIds((s) => {
