@@ -39,15 +39,15 @@ describe("RequirementStore", () => {
   })
 
   it("create 生成递增 id，默认从 REQ-100 开始，backlog 初始态", async () => {
-    const first = await store.create({ title: "  OAuth 2.0 重构  ", priority: "P0", source: "chat" })
-    const second = await store.create({ title: "导出报表 CSV", description: "支持分页" })
+    const first = await store.create({ title: "  OAuth 2.0 重构  ", projectId: "p-alpha", priority: "P0", source: "chat" })
+    const second = await store.create({ title: "导出报表 CSV", projectId: "p-alpha", description: "支持分页" })
 
     expect(first.id).toBe("REQ-100")
     expect(first.title).toBe("OAuth 2.0 重构")
     expect(first.priority).toBe("P0")
     expect(first.status).toBe("backlog")
     expect(first.source).toBe("chat")
-    expect(first.owner).toBeNull()
+    expect(first.projectId).toBe("p-alpha")
     expect(first.description).toBe("")
 
     expect(second.id).toBe("REQ-101")
@@ -58,7 +58,14 @@ describe("RequirementStore", () => {
   })
 
   it("create 拒绝空标题", async () => {
-    await expect(store.create({ title: "   " })).rejects.toMatchObject({
+    await expect(store.create({ title: "   ", projectId: "p-alpha" })).rejects.toMatchObject({
+      name: "RequirementsError",
+      code: "invalid-input",
+    })
+  })
+
+  it("create 拒绝空 projectId", async () => {
+    await expect(store.create({ title: "A", projectId: "   " })).rejects.toMatchObject({
       name: "RequirementsError",
       code: "invalid-input",
     })
@@ -66,7 +73,7 @@ describe("RequirementStore", () => {
 
   it("并发 create 的 id 唯一（写链原子序号）", async () => {
     const created = await Promise.all(
-      Array.from({ length: 20 }, (_, i) => store.create({ title: `需求 ${i}` })),
+      Array.from({ length: 20 }, (_, i) => store.create({ title: `需求 ${i}`, projectId: "p-alpha" })),
     )
     const ids = created.map((r) => r.id)
     expect(new Set(ids).size).toBe(20)
@@ -75,8 +82,8 @@ describe("RequirementStore", () => {
   })
 
   it("get/list 反映已写入记录", async () => {
-    await store.create({ title: "A" })
-    await store.create({ title: "B", priority: "P1" })
+    await store.create({ title: "A", projectId: "p-alpha" })
+    await store.create({ title: "B", priority: "P1", projectId: "p-alpha" })
 
     expect(store.list().map((r) => r.id)).toEqual(["REQ-100", "REQ-101"])
     expect(store.get("REQ-100")?.title).toBe("A")
@@ -84,21 +91,29 @@ describe("RequirementStore", () => {
   })
 
   it("list 支持先过滤后排序（数值 id 序）", async () => {
-    await store.create({ title: "A", priority: "P1" })
-    await store.create({ title: "B", priority: "P0" })
-    await store.create({ title: "C", priority: "P2" })
+    await store.create({ title: "A", priority: "P1", projectId: "p-alpha" })
+    await store.create({ title: "B", priority: "P0", projectId: "p-alpha" })
+    await store.create({ title: "C", priority: "P2", projectId: "p-alpha" })
 
     const filtered = store.list((r) => r.priority === "P0" || r.priority === "P2")
     expect(filtered.map((r) => r.id)).toEqual(["REQ-101", "REQ-102"])
     expect(store.list().map((r) => r.id)).toEqual(["REQ-100", "REQ-101", "REQ-102"])
   })
 
-  it("update 支持字段修改与合法状态迁移", async () => {
-    const req = await store.create({ title: "A" })
+  it("list 可按 projectId 隔离不同项目", async () => {
+    await store.create({ title: "A", projectId: "p-alpha" })
+    await store.create({ title: "B", projectId: "p-beta" })
 
-    const renamed = await store.update(req.id, { title: "A2", owner: "张三" })
+    expect(store.list((r) => r.projectId === "p-alpha").map((r) => r.id)).toEqual(["REQ-100"])
+    expect(store.list((r) => r.projectId === "p-beta").map((r) => r.id)).toEqual(["REQ-101"])
+    expect(store.list((r) => r.projectId === "p-gamma")).toHaveLength(0)
+  })
+
+  it("update 支持字段修改与合法状态迁移", async () => {
+    const req = await store.create({ title: "A", projectId: "p-alpha" })
+
+    const renamed = await store.update(req.id, { title: "A2" })
     expect(renamed.title).toBe("A2")
-    expect(renamed.owner).toBe("张三")
     expect(renamed.updatedAt >= renamed.createdAt).toBe(true)
 
     const planned = await store.update(req.id, { status: "planned" })
@@ -115,7 +130,7 @@ describe("RequirementStore", () => {
   })
 
   it("update 拒绝非法状态迁移", async () => {
-    const req = await store.create({ title: "A" })
+    const req = await store.create({ title: "A", projectId: "p-alpha" })
     await expect(store.update(req.id, { status: "done" })).rejects.toMatchObject({
       code: "invalid-transition",
     })
@@ -124,7 +139,7 @@ describe("RequirementStore", () => {
   })
 
   it("update 拒绝回退迁移", async () => {
-    const req = await store.create({ title: "A" })
+    const req = await store.create({ title: "A", projectId: "p-alpha" })
     await store.update(req.id, { status: "planned" })
     await expect(store.update(req.id, { status: "backlog" })).rejects.toMatchObject({
       code: "invalid-transition",
@@ -133,7 +148,7 @@ describe("RequirementStore", () => {
   })
 
   it("update 拒绝空标题和空更新", async () => {
-    const req = await store.create({ title: "A" })
+    const req = await store.create({ title: "A", projectId: "p-alpha" })
     await expect(store.update(req.id, { title: "   " })).rejects.toMatchObject({
       code: "invalid-input",
     })
@@ -149,25 +164,25 @@ describe("RequirementStore", () => {
   })
 
   it("remove 幂等：存在返回 true，缺失返回 false", async () => {
-    const req = await store.create({ title: "A" })
+    const req = await store.create({ title: "A", projectId: "p-alpha" })
     expect(await store.remove(req.id)).toBe(true)
     expect(store.get(req.id)).toBeUndefined()
     expect(await store.remove(req.id)).toBe(false)
   })
 
   it("持久化：重开域后数据仍在", async () => {
-    await store.create({ title: "A", priority: "P1" })
-    await store.create({ title: "B" })
+    await store.create({ title: "A", priority: "P1", projectId: "p-alpha" })
+    await store.create({ title: "B", projectId: "p-alpha" })
     await store.close()
 
     const reopened = await RequirementStore.open(harness.ctx, { startSeq: 100 })
     try {
       const records = reopened.list()
       expect(records).toHaveLength(2)
-      expect(records[0]).toMatchObject({ id: "REQ-100", title: "A", priority: "P1" })
+      expect(records[0]).toMatchObject({ id: "REQ-100", title: "A", priority: "P1", projectId: "p-alpha" })
       expect(records[1]).toMatchObject({ id: "REQ-101", title: "B" })
       // 序号延续：重开后新 id 不冲突
-      const third = await reopened.create({ title: "C" })
+      const third = await reopened.create({ title: "C", projectId: "p-alpha" })
       expect(third.id).toBe("REQ-102")
     } finally {
       await reopened.close()

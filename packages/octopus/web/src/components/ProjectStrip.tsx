@@ -1,11 +1,11 @@
 import { Button } from "octopus-ui"
-import { Blocks, Columns3 } from "octopus-ui"
+import { Columns3, FileText } from "octopus-ui"
 import type { ProjectSummary } from "../lib/types"
 
 export interface ProjectStripProps {
   summary: ProjectSummary | null
   onOpenKanban: () => void
-  onOpenModules: () => void
+  onOpenRequirements: () => void
 }
 
 interface MetricProps {
@@ -28,7 +28,7 @@ function Metric({ value, suffix, label, warn }: MetricProps) {
   )
 }
 
-export function ProjectStrip({ summary, onOpenKanban, onOpenModules }: ProjectStripProps) {
+export function ProjectStrip({ summary, onOpenKanban, onOpenRequirements }: ProjectStripProps) {
   return (
     <section className="flex h-14 shrink-0 items-center gap-6 border-b border-border bg-background px-6">
       {summary ? (
@@ -43,9 +43,9 @@ export function ProjectStrip({ summary, onOpenKanban, onOpenModules }: ProjectSt
 
       <span className="flex-1" />
 
-      <Button variant="ghost" size="sm" onClick={onOpenModules}>
-        <Blocks className="h-3.5 w-3.5" />
-        已装模块
+      <Button variant="ghost" size="sm" onClick={onOpenRequirements}>
+        <FileText className="h-3.5 w-3.5" />
+        需求看板
       </Button>
       <Button variant="ghost" size="sm" onClick={onOpenKanban}>
         <Columns3 className="h-3.5 w-3.5" />

@@ -1,6 +1,9 @@
 import { defineConfig } from "vite"
+import { octopusVendor } from "../src/vite-plugin"
 
 export default defineConfig({
+  plugins: [octopusVendor()],
+  base: "/workbench/",
   define: {
     "process.env.NODE_ENV": JSON.stringify("production"),
   },
@@ -13,6 +16,7 @@ export default defineConfig({
         "react-dom": "src/vendor/react-dom.ts",
         "react-dom-client": "src/vendor/react-dom-client.ts",
         "jsx-runtime": "src/vendor/jsx-runtime.ts",
+        "octopus-ui": "src/vendor/octopus-ui.ts",
       },
       formats: ["es"],
     },

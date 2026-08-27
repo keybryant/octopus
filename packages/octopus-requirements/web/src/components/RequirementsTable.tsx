@@ -27,7 +27,6 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, onEd
             <th className="px-4 py-3 font-medium">标题</th>
             <th className="px-4 py-3 font-medium">优先级</th>
             <th className="px-4 py-3 font-medium">状态</th>
-            <th className="px-4 py-3 font-medium">负责人</th>
             <th className="px-4 py-3 font-medium">创建时间</th>
             <th className="px-4 py-3 text-right font-medium">操作</th>
           </tr>
@@ -72,7 +71,6 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, onEd
                     <Badge tone={meta.tone}>{meta.label}</Badge>
                   )}
                 </td>
-                <td className={`px-4 py-3.5 ${r.owner ? "" : "text-text-faint"}`}>{r.owner ?? "未分配"}</td>
                 <td className="px-4 py-3.5 font-mono text-[11px] text-muted-foreground">
                   {new Date(r.createdAt).toLocaleDateString()}
                 </td>
@@ -101,7 +99,7 @@ export function RequirementsTable({ requirements, onStatusChange, onDelete, onEd
           })}
           {requirements.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-10 text-center text-xs text-text-faint">
+              <td colSpan={6} className="px-4 py-10 text-center text-xs text-text-faint">
                 暂无需求
               </td>
             </tr>

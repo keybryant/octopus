@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import RequirementsModule from "./index"
+import { currentProjectId } from "./api"
 
 const RECORDS = [
   {
@@ -10,7 +11,7 @@ const RECORDS = [
     description: "认证模块升级",
     priority: "P0",
     status: "backlog",
-    owner: null,
+    projectId: "p-alpha",
     source: "manual",
     createdAt: "2026-08-27T08:00:00.000Z",
     updatedAt: "2026-08-27T08:00:00.000Z",
@@ -21,7 +22,7 @@ const RECORDS = [
     description: "",
     priority: "P2",
     status: "done",
-    owner: "张三",
+    projectId: "p-alpha",
     source: "manual",
     createdAt: "2026-08-26T08:00:00.000Z",
     updatedAt: "2026-08-26T08:00:00.000Z",
@@ -37,20 +38,20 @@ function mockList() {
 }
 
 afterEach(() => {
+  delete (window as unknown as { __octopusProjectId?: string }).__octopusProjectId
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
 describe("RequirementsModule", () => {
-  it("渲染列表：编号/标题/状态/负责人", async () => {
+  it("渲染列表：编号/标题/状态（无负责人列）", async () => {
     vi.stubGlobal("fetch", mockList())
     render(<RequirementsModule />)
     expect(await screen.findByText("OAuth 2.0 重构")).toBeInTheDocument()
     expect(screen.getByText("REQ-100")).toBeInTheDocument()
     expect(screen.getAllByText("待排期").length).toBeGreaterThan(0)
     expect(screen.getAllByText("已完成").length).toBeGreaterThan(0)
-    expect(screen.getByText("张三")).toBeInTheDocument()
-    expect(screen.getByText("未分配")).toBeInTheDocument()
+    expect(screen.queryByRole("columnheader", { name: "负责人" })).not.toBeInTheDocument()
     expect(screen.getByText("共 2 条")).toBeInTheDocument()
   })
 
@@ -70,7 +71,8 @@ describe("RequirementsModule", () => {
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
   })
 
-  it("新建流程：打开弹窗提交后插入列表", async () => {
+  it("新建流程：打开弹窗提交后插入列表，body 注入 projectId", async () => {
+    ;(window as unknown as { __octopusProjectId?: string }).__octopusProjectId = "p-alpha"
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockResponse(200, { ok: true, data: RECORDS }))
@@ -83,7 +85,7 @@ describe("RequirementsModule", () => {
             description: "",
             priority: "P2",
             status: "backlog",
-            owner: null,
+            projectId: "p-alpha",
             source: "manual",
             createdAt: "2026-08-27T09:00:00.000Z",
             updatedAt: "2026-08-27T09:00:00.000Z",
@@ -92,6 +94,7 @@ describe("RequirementsModule", () => {
       )
     vi.stubGlobal("fetch", fetchMock)
     render(<RequirementsModule />)
+    expect(currentProjectId()).toBe("p-alpha")
     await screen.findByText("OAuth 2.0 重构")
 
     await userEvent.click(screen.getByRole("button", { name: /新建需求/ }))
@@ -101,7 +104,10 @@ describe("RequirementsModule", () => {
     await waitFor(() => expect(screen.getByText("新需求")).toBeInTheDocument())
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/octopus-requirements/requirements",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "新需求", description: "", priority: "P1", projectId: "p-alpha" }),
+      }),
     )
   })
 
@@ -112,7 +118,7 @@ describe("RequirementsModule", () => {
       .mockResolvedValueOnce(
         mockResponse(200, {
           ok: true,
-          data: { ...RECORDS[0], title: "OAuth 2.0 重构 v2", owner: "李四" },
+          data: { ...RECORDS[0], title: "OAuth 2.0 重构 v2" },
         }),
       )
     vi.stubGlobal("fetch", fetchMock)
@@ -126,7 +132,6 @@ describe("RequirementsModule", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存修改" }))
 
     await waitFor(() => expect(screen.getByText("OAuth 2.0 重构 v2")).toBeInTheDocument())
-    expect(screen.getByText("李四")).toBeInTheDocument()
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/octopus-requirements/requirements/REQ-100",
       expect.objectContaining({ method: "PATCH" }),

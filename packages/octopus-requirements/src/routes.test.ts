@@ -55,26 +55,29 @@ async function createHarness() {
 
 describe("parseCreateInput / parsePatchInput", () => {
   it("parseCreateInput 归一化合法入参", () => {
-    expect(parseCreateInput({ title: "A", description: "d", priority: "P0", source: "chat" })).toEqual({
+    expect(parseCreateInput({ title: "A", projectId: "p-alpha", description: "d", priority: "P0", source: "chat" })).toEqual({
       title: "A",
+      projectId: "p-alpha",
       description: "d",
       priority: "P0",
     })
-    expect(parseCreateInput({ title: "B" })).toEqual({ title: "B" })
+    expect(parseCreateInput({ title: "B", projectId: "p-alpha" })).toEqual({ title: "B", projectId: "p-alpha" })
   })
 
-  it("parseCreateInput 拒绝缺 title 与非法枚举", () => {
+  it("parseCreateInput 拒绝缺 title/projectId 与非法枚举", () => {
     expect(() => parseCreateInput({})).toThrowError(/title is required/)
-    expect(() => parseCreateInput({ title: "A", priority: "P9" })).toThrowError(/priority/)
+    expect(() => parseCreateInput({ title: "A" })).toThrowError(/projectId is required/)
+    expect(() => parseCreateInput({ title: "A", projectId: "  " })).toThrowError(/projectId is required/)
+    expect(() => parseCreateInput({ title: "A", projectId: "p", priority: "P9" })).toThrowError(/priority/)
     expect(() => parseCreateInput(null)).toThrowError(/object/)
   })
 
   it("parsePatchInput 只接受声明字段", () => {
-    expect(parsePatchInput({ status: "planned", owner: null, extra: 1 })).toEqual({
+    expect(parsePatchInput({ status: "planned", extra: 1 })).toEqual({
       status: "planned",
-      owner: null,
     })
     expect(() => parsePatchInput({ status: "bogus" })).toThrowError(/status/)
+    expect(() => parsePatchInput({ owner: "张三" } as never)).toThrowError(/no fields to update/)
   })
 
   it("parsePatchInput 拒绝空标题和空更新", () => {
@@ -107,6 +110,7 @@ describe("requirement REST API", () => {
   it("POST 创建需求返回 201，source 由服务端固定为 manual", async () => {
     const { res, body } = await call("POST", REQUIREMENTS_PATH, {
       title: "OAuth 2.0 重构",
+      projectId: "p-alpha",
       description: "认证模块",
       priority: "P0",
       source: "chat",
@@ -118,6 +122,7 @@ describe("requirement REST API", () => {
       title: "OAuth 2.0 重构",
       priority: "P0",
       status: "backlog",
+      projectId: "p-alpha",
       source: "manual",
     })
   })
@@ -129,7 +134,13 @@ describe("requirement REST API", () => {
   })
 
   it("POST 缺 title 返回 400 invalid-input", async () => {
-    const { res, body } = await call("POST", REQUIREMENTS_PATH, { priority: "P0" })
+    const { res, body } = await call("POST", REQUIREMENTS_PATH, { priority: "P0", projectId: "p-alpha" })
+    expect(res.calls[0].status).toBe(400)
+    expect(body.error.code).toBe("invalid-input")
+  })
+
+  it("POST 缺 projectId 返回 400 invalid-input", async () => {
+    const { res, body } = await call("POST", REQUIREMENTS_PATH, { title: "A" })
     expect(res.calls[0].status).toBe(400)
     expect(body.error.code).toBe("invalid-input")
   })
@@ -158,30 +169,39 @@ describe("requirement REST API", () => {
       },
     } as never)
     const res = createRes()
-    await broken(createReq("GET", REQUIREMENTS_PATH), res)
+    await broken(createReq("GET", REQUIREMENTS_PATH + "?projectId=p"), res)
     const body = JSON.parse(res.calls[0].body)
     expect(res.calls[0].status).toBe(500)
     expect(body.error.code).toBe("internal")
     expect(JSON.stringify(body)).not.toContain("secret-detail")
   })
 
-  it("GET 列表 + status/priority 过滤", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A", priority: "P0" })
-    await call("POST", REQUIREMENTS_PATH, { title: "B", priority: "P1" })
+  it("GET 列表 + status/priority 过滤（projectId 必填）", async () => {
+    await call("POST", REQUIREMENTS_PATH, { title: "A", priority: "P0", projectId: "p-alpha" })
+    await call("POST", REQUIREMENTS_PATH, { title: "B", priority: "P1", projectId: "p-alpha" })
+    await call("POST", REQUIREMENTS_PATH, { title: "C", projectId: "p-beta" })
     await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "planned" })
 
-    const all = await call("GET", REQUIREMENTS_PATH)
+    const noProject = await call("GET", REQUIREMENTS_PATH)
+    expect(noProject.res.calls[0].status).toBe(400)
+    expect(noProject.body.error.code).toBe("invalid-input")
+
+    const all = await call("GET", REQUIREMENTS_PATH + "?projectId=p-alpha")
     expect(all.body.data.map((r: any) => r.id)).toEqual(["REQ-100", "REQ-101"])
 
-    const filtered = await call("GET", REQUIREMENTS_PATH + "?status=planned&priority=P0")
+    // 只能查当前项目下的需求：p-beta 项目看不到 p-alpha 的需求
+    const beta = await call("GET", REQUIREMENTS_PATH + "?projectId=p-beta")
+    expect(beta.body.data.map((r: any) => r.id)).toEqual(["REQ-102"])
+
+    const filtered = await call("GET", REQUIREMENTS_PATH + "?projectId=p-alpha&status=planned&priority=P0")
     expect(filtered.body.data).toEqual([expect.objectContaining({ id: "REQ-100" })])
 
-    const bad = await call("GET", REQUIREMENTS_PATH + "?status=bogus")
+    const bad = await call("GET", REQUIREMENTS_PATH + "?projectId=p-alpha&status=bogus")
     expect(bad.res.calls[0].status).toBe(400)
   })
 
   it("GET 单条：命中 200，缺失 404", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("POST", REQUIREMENTS_PATH, { title: "A", projectId: "p-alpha" })
     const hit = await call("GET", REQUIREMENTS_PATH + "/REQ-100")
     expect(hit.body.data).toMatchObject({ id: "REQ-100", title: "A" })
 
@@ -191,14 +211,13 @@ describe("requirement REST API", () => {
   })
 
   it("PATCH 更新字段与合法迁移；非法迁移 422", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("POST", REQUIREMENTS_PATH, { title: "A", projectId: "p-alpha" })
 
     const patched = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", {
       title: "A2",
       status: "planned",
-      owner: "张三",
     })
-    expect(patched.body.data).toMatchObject({ id: "REQ-100", title: "A2", status: "planned", owner: "张三" })
+    expect(patched.body.data).toMatchObject({ id: "REQ-100", title: "A2", status: "planned" })
 
     const bad = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "done" })
     expect(bad.res.calls[0].status).toBe(422)
@@ -209,7 +228,7 @@ describe("requirement REST API", () => {
   })
 
   it("PATCH 拒绝空标题与空更新", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("POST", REQUIREMENTS_PATH, { title: "A", projectId: "p-alpha" })
 
     const emptyTitle = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { title: "   " })
     expect(emptyTitle.res.calls[0].status).toBe(400)
@@ -221,7 +240,7 @@ describe("requirement REST API", () => {
   })
 
   it("PATCH 拒绝回退迁移", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("POST", REQUIREMENTS_PATH, { title: "A", projectId: "p-alpha" })
     await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "planned" })
 
     const backward = await call("PATCH", REQUIREMENTS_PATH + "/REQ-100", { status: "backlog" })
@@ -230,7 +249,7 @@ describe("requirement REST API", () => {
   })
 
   it("DELETE 幂等：200 true / 200 false", async () => {
-    await call("POST", REQUIREMENTS_PATH, { title: "A" })
+    await call("POST", REQUIREMENTS_PATH, { title: "A", projectId: "p-alpha" })
     const first = await call("DELETE", REQUIREMENTS_PATH + "/REQ-100")
     expect(first.body).toEqual({ ok: true, data: true })
     const second = await call("DELETE", REQUIREMENTS_PATH + "/REQ-100")

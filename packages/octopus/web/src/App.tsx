@@ -5,11 +5,11 @@ import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects,
 import { ArtifactsRail } from "./components/ArtifactsRail"
 import { ChatPane } from "./components/ChatPane"
 import { KanbanDrawer } from "./components/KanbanDrawer"
-import { ModulesDrawer } from "./components/ModulesDrawer"
 import { ModulePaneModal } from "./components/ModulePaneModal"
 import { NewProjectModal } from "./components/NewProjectModal"
 import { ProjectSettingsModal, type SettingsProject } from "./components/ProjectSettingsModal"
 import { ProjectStrip } from "./components/ProjectStrip"
+import { RequirementsDrawer } from "./components/RequirementsDrawer"
 import { TopBar } from "./components/TopBar"
 import {
   createDefaultAgentClient,
@@ -24,7 +24,7 @@ import type {
   ProjectSummary,
 } from "./lib/types"
 
-type DrawerKind = "tasks" | "modules" | null
+type DrawerKind = "tasks" | "reqs" | null
 
 function toSummary(p: ProjectRecordView): ProjectSummary {
   return {
@@ -67,6 +67,17 @@ export default function App() {
   const [records, setRecords] = useState<Record<string, ProjectRecordView>>({})
   const [settingsOpen, setSettingsOpen] = useState(false)
   const current = projects.find((p) => p.id === projectId) ?? projects[0]
+
+  // 需求插件入口：注入当前项目编码（需求只查询/创建到当前项目下）
+  const requirementsEntry = useMemo(
+    () => modules.find((m) => m.id === "requirements")?.entry,
+    [modules],
+  )
+
+  useEffect(() => {
+    // 需求插件通过全局变量读取当前项目编码（插件页面无宿主 query 可用）
+    ;(window as { __octopusProjectId?: string }).__octopusProjectId = current?.id
+  }, [current])
 
   useEffect(() => {
     void fetchProjects().then((items) => {
@@ -168,7 +179,7 @@ export default function App() {
             <ProjectStrip
               summary={current}
               onOpenKanban={() => setDrawer("tasks")}
-              onOpenModules={() => setDrawer("modules")}
+              onOpenRequirements={() => setDrawer("reqs")}
             />
 
             <div className="flex min-h-0 flex-1">
@@ -187,10 +198,10 @@ export default function App() {
               columns={columns}
               onCreateTask={handleCreateTask}
             />
-            <ModulesDrawer
-              open={drawer === "modules"}
+            <RequirementsDrawer
+              open={drawer === "reqs"}
               onClose={() => setDrawer(null)}
-              modules={modules}
+              entry={requirementsEntry}
             />
             <ProjectSettingsModal
               open={settingsOpen && settingsTarget !== null}

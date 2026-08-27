@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { createRequirement, listRequirements, removeRequirement, updateRequirement } from "./api"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { createRequirement, currentProjectId, listRequirements, removeRequirement, updateRequirement } from "./api"
 
 function mockFetchOnce(status: number, body: unknown) {
   return vi.fn().mockResolvedValue({
@@ -9,28 +9,48 @@ function mockFetchOnce(status: number, body: unknown) {
   })
 }
 
+beforeEach(() => {
+  vi.stubGlobal("location", { ...window.location, search: "" })
+})
+
 afterEach(() => {
+  delete (window as unknown as { __octopusProjectId?: string }).__octopusProjectId
   vi.unstubAllGlobals()
 })
 
 describe("web api", () => {
-  it("listRequirements 请求列表并返回数据", async () => {
+  it("listRequirements 请求列表并返回数据（projectId 必带）", async () => {
     const data = [{ id: "REQ-100", title: "A" }]
     vi.stubGlobal("fetch", mockFetchOnce(200, { ok: true, data }))
-    const result = await listRequirements({ status: "backlog" })
+    const result = await listRequirements({ projectId: "p-alpha", status: "backlog" })
     expect(result).toEqual(data)
     expect(fetch).toHaveBeenCalledWith(
-      "/api/octopus-requirements/requirements?status=backlog",
+      "/api/octopus-requirements/requirements?projectId=p-alpha&status=backlog",
       expect.objectContaining({ headers: { "content-type": "application/json" } }),
     )
   })
 
-  it("createRequirement POST 序列化 body", async () => {
+  it("list 未显式传 projectId 时回退到宿主注入值", async () => {
+    ;(window as unknown as { __octopusProjectId?: string }).__octopusProjectId = "p-beta"
+    vi.stubGlobal("fetch", mockFetchOnce(200, { ok: true, data: [] }))
+    await listRequirements()
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/octopus-requirements/requirements?projectId=p-beta",
+      expect.anything(),
+    )
+    expect(currentProjectId()).toBe("p-beta")
+  })
+
+  it("createRequirement POST 序列化 body 并注入 projectId", async () => {
+    ;(window as unknown as { __octopusProjectId?: string }).__octopusProjectId = "p-alpha"
     vi.stubGlobal("fetch", mockFetchOnce(201, { ok: true, data: { id: "REQ-100" } }))
     await createRequirement({ title: "A", priority: "P0" })
     expect(fetch).toHaveBeenCalledWith(
       "/api/octopus-requirements/requirements",
-      expect.objectContaining({ method: "POST", body: JSON.stringify({ title: "A", priority: "P0" }) }),
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ title: "A", priority: "P0", projectId: "p-alpha" }),
+      }),
     )
   })
 

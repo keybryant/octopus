@@ -7,6 +7,13 @@ interface ApiOk<T> {
   data: T
 }
 
+/** 当前项目编码：宿主 shell 通过 window.__octopusProjectId 注入；低优先级回退 URL query */
+export function currentProjectId(): string {
+  const injected = (window as { __octopusProjectId?: string }).__octopusProjectId
+  if (injected) return injected
+  return new URLSearchParams(window.location.search).get("projectId") ?? ""
+}
+
 async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   let res: Response
   try {
@@ -25,11 +32,15 @@ async function request<T>(url: string, init: RequestInit = {}): Promise<T> {
   return body.data
 }
 
+/** 查询只允许落在当前项目下；projectId 有显式传参优先，否则取宿主注入值 */
 export async function listRequirements(params?: {
+  projectId?: string
   status?: RequirementStatus
   priority?: Priority
 }): Promise<RequirementRecord[]> {
   const qs = new URLSearchParams()
+  const projectId = params?.projectId ?? currentProjectId()
+  if (projectId) qs.set("projectId", projectId)
   if (params?.status) qs.set("status", params.status)
   if (params?.priority) qs.set("priority", params.priority)
   const query = qs.size > 0 ? `?${qs.toString()}` : ""
@@ -38,12 +49,16 @@ export async function listRequirements(params?: {
 
 export async function createRequirement(input: {
   title: string
+  projectId?: string
   description?: string
   priority?: Priority
 }): Promise<RequirementRecord> {
   return request<RequirementRecord>(BASE, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({
+      ...input,
+      projectId: input.projectId ?? currentProjectId(),
+    }),
   })
 }
 

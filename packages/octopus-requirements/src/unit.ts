@@ -8,7 +8,8 @@ const requirementSchema = z.object({
   description: z.string(),
   priority: z.enum(["P0", "P1", "P2"]),
   status: z.enum(["backlog", "planned", "in-progress", "review", "done"]),
-  owner: z.string().nullable(),
+  // 老数据无 projectId：缺省为空串（查询时被过滤到任意项目之外）
+  projectId: z.string().min(1).default(""),
   source: z.enum(["manual", "chat"]),
   createdAt: z.string(),
   updatedAt: z.string(),

@@ -20,15 +20,16 @@ export interface RequirementRecord {
   description: string
   priority: Priority
   status: RequirementStatus
-  owner: string | null
+  projectId: string
   source: RequirementSource
   createdAt: string
   updatedAt: string
 }
 
-/** 新建需求入参（title 必填，其余可选） */
+/** 新建需求入参（title/projectId 必填，其余可选） */
 export interface RequirementInput {
   title: string
+  projectId: string
   description?: string
   priority?: Priority
   source?: RequirementSource
@@ -36,7 +37,7 @@ export interface RequirementInput {
 
 /** 更新入参：部分字段；status 变更需满足状态机 */
 export type RequirementPatch = Partial<
-  Pick<RequirementRecord, "title" | "description" | "priority" | "status" | "owner">
+  Pick<RequirementRecord, "title" | "description" | "priority" | "status">
 >
 
 export type RequirementsErrorCode = "not-found" | "invalid-input" | "invalid-transition"

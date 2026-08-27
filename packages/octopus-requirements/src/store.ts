@@ -61,6 +61,8 @@ export class RequirementStore {
   async create(input: RequirementInput): Promise<RequirementRecord> {
     const title = input.title.trim()
     if (!title) throw new RequirementsError("invalid-input", "title is required")
+    const projectId = input.projectId.trim()
+    if (!projectId) throw new RequirementsError("invalid-input", "projectId is required")
 
     const meta = this.domain.table(META_TABLE)
     const next = await meta.update(SEQ_KEY, (m) => ({ seq: m.seq + 1 }))
@@ -71,7 +73,7 @@ export class RequirementStore {
       description: input.description?.trim() ?? "",
       priority: input.priority ?? "P2",
       status: "backlog",
-      owner: null,
+      projectId,
       source: input.source ?? "manual",
       createdAt: now,
       updatedAt: now,

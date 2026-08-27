@@ -7,7 +7,6 @@ export interface NewRequirementInput {
   title: string
   description: string
   priority: Priority
-  owner: string
 }
 
 export interface NewRequirementModalProps {
@@ -22,14 +21,12 @@ export function NewRequirementModal({ open, onClose, onSubmit, submitting = fals
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState<Priority>("P1")
-  const [owner, setOwner] = useState("")
 
   useEffect(() => {
     if (!open) return
     setTitle(initial?.title ?? "")
     setDescription(initial?.description ?? "")
     setPriority(initial?.priority ?? "P1")
-    setOwner(initial?.owner ?? "")
   }, [open, initial])
 
   const canSubmit = title.trim().length > 0 && !submitting
@@ -37,11 +34,10 @@ export function NewRequirementModal({ open, onClose, onSubmit, submitting = fals
 
   const submit = async () => {
     if (!canSubmit) return
-    await onSubmit({ title: title.trim(), description: description.trim(), priority, owner: owner.trim() })
+    await onSubmit({ title: title.trim(), description: description.trim(), priority })
     setTitle("")
     setDescription("")
     setPriority("P1")
-    setOwner("")
     onClose()
   }
 
@@ -75,14 +71,6 @@ export function NewRequirementModal({ open, onClose, onSubmit, submitting = fals
           />
         </div>
         <PriorityPicker value={priority} onChange={setPriority} />
-        <div>
-          <div className="mb-1.5 text-xs text-muted-foreground">负责人</div>
-          <Input
-            value={owner}
-            onChange={(e) => setOwner(e.target.value)}
-            placeholder="负责人（可选）"
-          />
-        </div>
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" onClick={onClose} disabled={submitting}>
             取消

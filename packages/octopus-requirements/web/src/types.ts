@@ -8,12 +8,12 @@ export interface RequirementRecord {
   description: string
   priority: Priority
   status: RequirementStatus
-  owner: string | null
+  projectId: string
   source: "manual" | "chat"
   createdAt: string
   updatedAt: string
 }
 
 export type RequirementPatch = Partial<
-  Pick<RequirementRecord, "title" | "description" | "priority" | "status" | "owner">
+  Pick<RequirementRecord, "title" | "description" | "priority" | "status">
 >

@@ -84,16 +84,17 @@ describe("App (v5 agent homepage)", () => {
     expect(await screen.findByRole("heading", { name: "用户管理" })).toBeInTheDocument()
   })
 
-  it("opens modules drawer showing plugin-registered module cards", async () => {
+  it("opens requirements drawer as a right sheet", async () => {
     mockedFetchProjects.mockResolvedValue([apiProject])
-    mockedFetchModules.mockResolvedValue([
-      { id: "requirements", title: "需求管理", entry: "/octopus/requirements/assets/index.js" },
-    ])
     const user = userEvent.setup()
     await renderApp()
-    await user.click(screen.getByRole("button", { name: /已装模块/ }))
-    expect(await screen.findByText("需求管理")).toBeInTheDocument()
-    expect(mockedFetchModules).toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: /需求看板/ }))
+    expect(await screen.findByRole("heading", { name: "需求看板" })).toBeInTheDocument()
+    // Esc 关闭后回到 agent 视图
+    fireEvent.keyDown(document, { key: "Escape" })
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "需求看板" })).not.toBeInTheDocument(),
+    )
   })
 
   it("opens kanban drawer from strip and closes on Esc", async () => {

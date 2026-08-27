@@ -103,7 +103,10 @@ export function parseCreateInput(body: unknown): RequirementInput {
   if (typeof raw.title !== "string") {
     throw new ApiError(400, "invalid-input", "title is required")
   }
-  const input: RequirementInput = { title: raw.title }
+  if (typeof raw.projectId !== "string" || !raw.projectId.trim()) {
+    throw new ApiError(400, "invalid-input", "projectId is required")
+  }
+  const input: RequirementInput = { title: raw.title, projectId: raw.projectId }
   if (raw.description !== undefined) {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     input.description = raw.description
@@ -141,23 +144,22 @@ export function parsePatchInput(body: unknown): RequirementPatch {
     if (!isStatus(raw.status)) throw new ApiError(400, "invalid-input", `status must be one of ${REQUIREMENT_STATUSES.join(", ")}`)
     patch.status = raw.status
   }
-  if (raw.owner !== undefined) {
-    if (raw.owner !== null && typeof raw.owner !== "string") {
-      throw new ApiError(400, "invalid-input", "owner must be a string or null")
-    }
-    patch.owner = raw.owner
-  }
   if (Object.keys(patch).length === 0) {
     throw new ApiError(400, "invalid-input", "no fields to update")
   }
   return patch
 }
 
-function listQuery(req: HttpRequest): { status?: RequirementStatus; priority?: Priority } {
+/** 列表查询：projectId 必填（需求只允许查询归属项目内的记录） */
+function listQuery(req: HttpRequest): { projectId: string; status?: RequirementStatus; priority?: Priority } {
   const url = new URL(req.url ?? "/", "http://localhost")
   const status = url.searchParams.get("status")
   const priority = url.searchParams.get("priority")
-  const query: { status?: RequirementStatus; priority?: Priority } = {}
+  const projectId = url.searchParams.get("projectId")
+  if (projectId === null || !projectId.trim()) {
+    throw new ApiError(400, "invalid-input", "projectId is required")
+  }
+  const query: { projectId: string; status?: RequirementStatus; priority?: Priority } = { projectId }
   if (status !== null) {
     if (!isStatus(status)) throw new ApiError(400, "invalid-input", `status must be one of ${REQUIREMENT_STATUSES.join(", ")}`)
     query.status = status
@@ -194,8 +196,16 @@ async function dispatch(store: RequirementStore, req: HttpRequest, res: HttpResp
 
   if (pathname === REQUIREMENTS_PATH) {
     if (method === "GET") {
-      const { status, priority } = listQuery(req)
-      ok(res, store.list((r) => (status === undefined || r.status === status) && (priority === undefined || r.priority === priority)))
+      const { projectId, status, priority } = listQuery(req)
+      ok(
+        res,
+        store.list(
+          (r) =>
+            r.projectId === projectId &&
+            (status === undefined || r.status === status) &&
+            (priority === undefined || r.priority === priority),
+        ),
+      )
       return
     }
     if (method === "POST") {

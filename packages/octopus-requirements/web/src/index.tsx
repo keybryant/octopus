@@ -93,7 +93,6 @@ export default function RequirementsModule() {
         title: input.title,
         description: input.description,
         priority: input.priority,
-        owner: input.owner || null,
       })
       setRequirements((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
       setModalOpen(false)
