@@ -5,6 +5,7 @@ export const WORKBENCH_VENDOR_PREFIX = "/workbench/assets/vendor"
 const VENDOR_URLS: Record<string, string> = {
   react: `${WORKBENCH_VENDOR_PREFIX}/react.js`,
   "react-dom": `${WORKBENCH_VENDOR_PREFIX}/react-dom.js`,
+  "react-dom/client": `${WORKBENCH_VENDOR_PREFIX}/react-dom-client.js`,
   "react/jsx-runtime": `${WORKBENCH_VENDOR_PREFIX}/jsx-runtime.js`,
 }
 

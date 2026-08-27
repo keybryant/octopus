@@ -11,6 +11,7 @@ export default defineConfig({
       entry: {
         react: "src/vendor/react.ts",
         "react-dom": "src/vendor/react-dom.ts",
+        "react-dom-client": "src/vendor/react-dom-client.ts",
         "jsx-runtime": "src/vendor/jsx-runtime.ts",
       },
       formats: ["es"],
