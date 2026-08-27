@@ -20,3 +20,8 @@ export {
 export { Sheet, type SheetProps } from "./overlays/sheet"
 export { Modal, type ModalProps } from "./overlays/modal"
 export * from "./icons"
+export {
+  OCTOPUS_DECOMPOSE_EVENT,
+  type DecomposePayload,
+  type DecomposePayloadHolder,
+} from "./bridge"
