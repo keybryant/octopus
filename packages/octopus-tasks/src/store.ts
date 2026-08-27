@@ -4,6 +4,7 @@ import { TASKS_DOMAIN, type TasksDomain } from "./unit.js"
 import {
   assertTransition,
   TasksError,
+  type TaskDraft,
   type TaskInput,
   type TaskPatch,
   type TaskRecord,
@@ -12,6 +13,9 @@ import {
 const TASK_TABLE = "tasks"
 const META_TABLE = "meta"
 const SEQ_KEY = "seq"
+
+/** 单批 createBatch 最多任务数 */
+export const BATCH_MAX = 50
 
 export interface TaskStoreOptions {
   /** id 起始序号（默认 2800，与历史 mock 看板 TASK-28xx 样式对齐） */
@@ -58,6 +62,45 @@ export class TaskStore {
     const record = this.buildRecord(`TASK-${next.seq}`, input)
     await this.domain.table(TASK_TABLE).put(record.id, record)
     return record
+  }
+
+  async createBatch(input: {
+    requirementId: string
+    projectId: string
+    tasks: TaskDraft[]
+  }): Promise<TaskRecord[]> {
+    const { requirementId, projectId, tasks } = input
+    if (!requirementId.trim()) throw new TasksError("invalid-input", "requirementId is required")
+    if (!projectId.trim()) throw new TasksError("invalid-input", "projectId is required")
+    if (!Array.isArray(tasks) || tasks.length === 0) {
+      throw new TasksError("invalid-input", "tasks must be a non-empty array")
+    }
+    if (tasks.length > BATCH_MAX) {
+      throw new TasksError("invalid-input", `at most ${BATCH_MAX} tasks per batch`)
+    }
+    for (const draft of tasks) {
+      this.assertTaskInput({ ...draft, requirementId, projectId })
+    }
+
+    const meta = this.domain.table(META_TABLE)
+    const next = await meta.update(SEQ_KEY, (m) => ({ seq: m.seq + tasks.length }))
+    const table = this.domain.table(TASK_TABLE)
+    const created: TaskRecord[] = []
+    try {
+      for (const draft of tasks) {
+        const record = this.buildRecord(
+          `TASK-${next.seq - tasks.length + 1 + created.length}`,
+          { ...draft, requirementId, projectId },
+        )
+        await table.put(record.id, record)
+        created.push(record)
+      }
+      return created
+    } catch (error) {
+      // 全有或全无：写入失败尽力回滚已写入记录后重抛
+      await Promise.allSettled(created.map((record) => table.delete(record.id)))
+      throw error
+    }
   }
 
   /** 校验入参（供 create 与 createBatch 共用；id 序号分配前调用，保证失败零写入） */

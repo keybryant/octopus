@@ -145,4 +145,58 @@ describe("TaskStore", () => {
       await reopened.close()
     }
   })
+
+  it("createBatch 成功：序号连续、全部 todo、绑定同一需求", async () => {
+    const created = await store.createBatch({
+      requirementId: "REQ-100",
+      projectId: "p-alpha",
+      tasks: [
+        { title: "实现A", priority: "P0" },
+        { title: "B 联调", assignee: "ZS" },
+        { title: "  C 验收  " },
+      ],
+    })
+    expect(created.map((t) => t.id)).toEqual(["TASK-2800", "TASK-2801", "TASK-2802"])
+    expect(created.every((t) => t.status === "todo" && t.requirementId === "REQ-100")).toBe(true)
+    expect(created[2].title).toBe("C 验收")
+    expect(created[1].assignee).toBe("ZS")
+  })
+
+  it("createBatch 校验失败零写入、序号不消耗", async () => {
+    await expect(
+      store.createBatch({
+        requirementId: "REQ-100",
+        projectId: "p-alpha",
+        tasks: [{ title: "  " }, { title: "ok" }],
+      }),
+    ).rejects.toMatchObject({ code: "invalid-input" })
+    expect(store.list()).toHaveLength(0)
+
+    // 序号未被消耗：下一个 create 仍是 TASK-2800
+    const next = await store.create({ title: "之后", requirementId: "REQ-100", projectId: "p-alpha" })
+    expect(next.id).toBe("TASK-2800")
+  })
+
+  it("createBatch 拒绝空数组、超上限（50）与缺 requirementId/projectId", async () => {
+    await expect(store.createBatch({ requirementId: "R", projectId: "p", tasks: [] })).rejects.toMatchObject({ code: "invalid-input" })
+    const many = Array.from({ length: 51 }, (_, i) => ({ title: `t${i}` }))
+    await expect(store.createBatch({ requirementId: "R", projectId: "p", tasks: many })).rejects.toMatchObject({ code: "invalid-input" })
+    await expect(store.createBatch({ requirementId: " ", projectId: "p", tasks: [{ title: "x" }] })).rejects.toMatchObject({ code: "invalid-input" })
+  })
+
+  it("并发 createBatch 与 create 混合 id 唯一", async () => {
+    const [batch, singles] = await Promise.all([
+      store.createBatch({
+        requirementId: "R",
+        projectId: "p-alpha",
+        tasks: [{ title: "A" }, { title: "B" }],
+      }),
+      Promise.all([
+        store.create({ title: "C", requirementId: "R", projectId: "p-alpha" }),
+        store.create({ title: "D", requirementId: "R", projectId: "p-alpha" }),
+      ]),
+    ])
+    const ids = [...batch, ...singles].map((t) => t.id)
+    expect(new Set(ids).size).toBe(4)
+  })
 })
