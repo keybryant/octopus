@@ -50,7 +50,8 @@ export async function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG>
         create: (path, title) => ctx.workspaceRegistry.create(path, title),
       },
     }
-  } catch {
+  } catch (err) {
+    console.error("[octopus-projects] storage domain open failed:", err)
     ctx.effect(() =>
       webServer.register({
         kind: "prefix",
