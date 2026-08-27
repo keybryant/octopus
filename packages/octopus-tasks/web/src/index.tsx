@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Button, Spinner } from "octopus-ui"
-import { listTasks, updateTask } from "./api"
+import { createTaskBatch, decomposeTasks, listTasks, updateTask } from "./api"
+import { DecomposeDraftsModal, type DecomposePayload, type DraftRow } from "./components/DecomposeDraftsModal"
 import { TaskBoard } from "./components/TaskBoard"
 import type { TaskRecord, TaskStatus } from "./types"
 import "./index.css"
@@ -12,6 +13,12 @@ export default function TasksModule() {
   const [error, setError] = useState<string | null>(null)
   const [moveError, setMoveError] = useState<string | null>(null)
   const [busyIds, setBusyIds] = useState<Set<string>>(new Set())
+  const [payload, setPayload] = useState<DecomposePayload | null>(null)
+  const [draftOpen, setDraftOpen] = useState(false)
+  const [draftLoading, setDraftLoading] = useState(false)
+  const [draftRows, setDraftRows] = useState<DraftRow[]>([])
+  const [draftSubmitting, setDraftSubmitting] = useState(false)
+  const [draftError, setDraftError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -53,6 +60,69 @@ export default function TasksModule() {
     [tasks],
   )
 
+  /** 打开拆解草稿弹窗：请求 AI 拆解 → 草稿行，空草稿兜底一行可编辑 */
+  const openDrafts = useCallback(async (p: DecomposePayload) => {
+    setPayload(p)
+    setDraftOpen(true)
+    setDraftError(null)
+    setDraftLoading(true)
+    try {
+      const drafts = await decomposeTasks({
+        requirementId: p.requirementId,
+        title: p.title,
+        description: p.description,
+        priority: p.priority,
+      })
+      const rows = drafts.length > 0 ? drafts : [{ title: "" }]
+      setDraftRows(rows.map((d) => ({ ...d, key: rowKeyRef.current++, checked: true })))
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : String(e))
+      setDraftRows([])
+    } finally {
+      setDraftLoading(false)
+    }
+  }, [])
+
+  const rowKeyRef = useRef(0)
+
+  // 消费 shell 写入的拆解载荷（读后清空，仅生效一次）
+  useEffect(() => {
+    const holder = window as unknown as { __octopusDecomposePayload?: DecomposePayload }
+    const incoming = holder.__octopusDecomposePayload
+    if (incoming) {
+      holder.__octopusDecomposePayload = undefined
+      void openDrafts(incoming)
+    }
+  }, [openDrafts])
+
+  /** 提交草稿任务：批量创建 → 合并进看板并按 id 排序 → 关闭弹窗 */
+  const handleSubmitDrafts = async () => {
+    if (!payload) return
+    setDraftSubmitting(true)
+    setDraftError(null)
+    setError(null)
+    try {
+      const tasks = draftRows
+        .filter((r) => r.checked && r.title.trim().length > 0)
+        .map((r) => ({
+          title: r.title.trim(),
+          priority: r.priority ?? "P1",
+          assignee: r.assignee,
+        }))
+      const created = await createTaskBatch({
+        requirementId: payload.requirementId,
+        tasks,
+      })
+      setTasks((prev) => [...prev, ...created].sort((a, b) => Number(a.id.slice(5)) - Number(b.id.slice(5))))
+      setDraftOpen(false)
+      setPayload(null)
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setDraftSubmitting(false)
+    }
+  }
+
   return (
     <section className="p-4">
       <div className="mb-3 flex items-center gap-3">
@@ -84,6 +154,25 @@ export default function TasksModule() {
           <TaskBoard tasks={tasks} busyIds={busyIds} onMove={handleMove} />
         </>
       )}
+
+      <DecomposeDraftsModal
+        open={draftOpen}
+        payload={payload}
+        loading={draftLoading}
+        rows={draftRows}
+        submitting={draftSubmitting}
+        error={draftError}
+        onRowChange={(key, patch) =>
+          setDraftRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)))
+        }
+        onRetry={() => payload && void openDrafts(payload)}
+        onClose={() => {
+          if (draftSubmitting) return
+          setDraftOpen(false)
+          setPayload(null)
+        }}
+        onSubmit={() => void handleSubmitDrafts()}
+      />
     </section>
   )
 }

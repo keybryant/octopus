@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import TasksModule from "./index"
 
@@ -128,5 +129,74 @@ describe("TasksModule", () => {
     render(<TasksModule />)
     expect(await screen.findByText("boom")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument()
+  })
+})
+
+describe("TasksModule 拆解流程", () => {
+  afterEach(() => {
+    delete (window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload
+  })
+
+  it("有载荷时自动 AI 拆解：草稿行 → 确认 → 批量创建并刷新看板", async () => {
+    ;(window as unknown as { __octopusProjectId?: string }).__octopusProjectId = "p-alpha"
+    ;(window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload = {
+      requirementId: "REQ-100",
+      title: "OAuth 2.0 重构",
+      priority: "P0",
+      description: "无感登录",
+    }
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockResponse(200, { ok: true, data: [] }))
+      .mockResolvedValueOnce(mockResponse(200, {
+        ok: true,
+        data: {
+          drafts: [
+            { title: "排期与拆解 OAuth 2.0 重构", priority: "P0" },
+            { title: "实现OAuth 2.0 重构 · 核心逻辑", priority: "P0" },
+          ],
+        },
+      }))
+      .mockResolvedValueOnce(mockResponse(201, {
+        ok: true,
+        data: [
+          { id: "TASK-2800", title: "排期与拆解 OAuth 2.0 重构", description: "", requirementId: "REQ-100", projectId: "p-alpha", priority: "P0", status: "todo", assignee: null, createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+        ],
+      }))
+    vi.stubGlobal("fetch", fetchMock)
+
+    render(<TasksModule />)
+    expect(await screen.findByText("拆解任务")).toBeInTheDocument()
+
+    await waitFor(() => expect(screen.getByLabelText("任务标题 0")).toHaveValue("排期与拆解 OAuth 2.0 重构"))
+    // 取消勾选第二行
+    const checkboxes = screen.getAllByRole("checkbox")
+    await userEvent.click(checkboxes[1])
+
+    await userEvent.click(screen.getByRole("button", { name: /创建任务/ }))
+
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/octopus-tasks/tasks/batch",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            requirementId: "REQ-100",
+            projectId: "p-alpha",
+            tasks: [{ title: "排期与拆解 OAuth 2.0 重构", priority: "P0" }],
+          }),
+        }),
+      ),
+    )
+    await waitFor(() => expect(screen.getByText("排期与拆解 OAuth 2.0 重构")).toBeInTheDocument())
+    // 载荷已消费
+    expect((window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload).toBeUndefined()
+  })
+
+  it("无载荷时不出弹窗", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, { ok: true, data: [] })))
+    render(<TasksModule />)
+    expect(await screen.findByText("任务看板")).toBeInTheDocument()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 })
