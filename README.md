@@ -16,6 +16,7 @@ pnpm dev:noopen # 同上但不打开浏览器
 - `packages/octopus`：工作台壳插件，提供 `ctx.workbench` 服务契约与 `/workbench` 页面
 - `packages/octopus-quickstart`：示例功能插件，验证模块注册与懒加载链路
 - `packages/octopus-projects`：项目管理服务插件，持久化项目并暴露 `/api/octopus-projects` CRUD，自动创建 dsh 工作区
+- `packages/octopus-agent`：工作台 Agent 会话服务：dsh AgentLoop 真实会话 + `/api/octopus-agent`；未挂载时聊天回退脚本 mock
 
 ## 新增功能插件
 
