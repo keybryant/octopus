@@ -23,6 +23,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     ]
     for (const ev of script) emit(ev)
   })
+  const cancelSpy = vi.fn(async () => undefined)
   const answerApprovalSpy = vi.fn(async (id: string, decision: "allow" | "deny") => undefined)
   const startSessionSpy = vi.fn(async () => "s-new")
   const switchToSpy = vi.fn(async () => undefined)
@@ -52,7 +53,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
       }
     },
     send: sendSpy,
-    cancel: vi.fn(async () => undefined),
+    cancel: cancelSpy,
     disposeSession: vi.fn(async () => undefined),
     answerApproval: answerApprovalSpy,
     reply: vi.fn(async () => ({ blocks: [] })),
@@ -68,6 +69,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     emit,
     sessions,
     sendSpy,
+    cancelSpy,
     answerApprovalSpy,
     startSessionSpy,
     switchToSpy,
@@ -189,6 +191,28 @@ describe("ChatPane", () => {
     expect(fake.answerApprovalSpy).toHaveBeenCalledWith("a1", "allow")
     await waitFor(() => expect(allowBtn).toBeDisabled())
     await waitFor(() => expect(denyBtn).toBeDisabled())
+  })
+
+  it("shows stop button while thinking and cancels the agent on click", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient([
+      { type: "user-message", text: "跑长任务" },
+      { type: "turn", at: "start" },
+    ])
+    render(<ChatPane agentClient={fake.client} />)
+    expect(await screen.findByText(/当前上下文/)).toBeInTheDocument()
+
+    const box = screen.getByPlaceholderText(/给 Octo Agent 下指令/)
+    await user.type(box, "跑长任务")
+    await user.keyboard("{Enter}")
+
+    const stop = await screen.findByTestId("stop-thinking")
+    await user.click(stop)
+    await waitFor(() => expect(fake.cancelSpy).toHaveBeenCalledOnce())
+
+    act(() => fake.emit({ type: "turn", at: "end" }))
+    act(() => fake.emit({ type: "status", status: "idle" }))
+    await waitFor(() => expect(screen.queryByTestId("stop-thinking")).not.toBeInTheDocument())
   })
 
   it("shows pending question banner and sending input answers it", async () => {

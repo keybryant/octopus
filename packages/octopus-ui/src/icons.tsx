@@ -28,6 +28,7 @@ export {
   FolderOpen,
   Layers,
   SquareCheckBig,
+  Square,
   Brain,
   History,
   ShieldCheck,

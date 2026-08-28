@@ -11,7 +11,7 @@ import {
   Sheet,
   Spinner,
 } from "octopus-ui"
-import { FileText, History, Plus } from "octopus-ui"
+import { FileText, History, Plus, Square } from "octopus-ui"
 import type { AgentClient, Artifact, PresetInfo, SessionContextInfo, SessionMeta } from "../lib/types"
 import { useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
@@ -230,10 +230,20 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
           ))}
 
           {status === "thinking" && (
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
               <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface">
                 <Spinner size="sm" />
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                data-testid="stop-thinking"
+                onClick={() => void agentClient?.cancel()}
+              >
+                <Square className="h-3 w-3" />
+                停止思考
+              </Button>
             </div>
           )}
         </div>
