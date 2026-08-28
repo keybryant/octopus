@@ -7,6 +7,8 @@ export interface TaskRecord {
   requirementId: string
   projectId: string
   status: TaskStatus
+  agentSessionId?: string
+  agentSummary?: string
   createdAt: string
   updatedAt: string
 }

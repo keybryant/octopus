@@ -77,6 +77,15 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
           >
             <div className="mb-1 flex items-center gap-2">
               <span className="mono text-[10.5px] text-text-faint">{t.id}</span>
+              {t.agentSessionId && (
+                <span
+                  aria-label="agent session"
+                  title={`任务会话 ${t.agentSessionId}`}
+                  className="rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground"
+                >
+                  agent
+                </span>
+              )}
               {busyIds.has(t.id) && <Spinner className="ml-auto h-3 w-3" />}
               {t.status !== "done" && !busyIds.has(t.id) && (
                 <DropdownMenu>
@@ -102,6 +111,9 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
             <div className={`text-[13px] font-medium leading-snug ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>
               {t.title}
             </div>
+            {t.agentSummary && (
+              <div className="mt-1.5 text-[11px] leading-snug text-muted-foreground">{t.agentSummary}</div>
+            )}
           </div>
         ))}
         {tasks.length === 0 && (

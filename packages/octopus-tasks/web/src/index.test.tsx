@@ -5,7 +5,7 @@ import TasksModule from "./index"
 
 const TASKS = [
   { id: "TASK-2800", title: "导出 CSV", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "todo", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
-  { id: "TASK-2801", title: "联调测试", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "doing", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+  { id: "TASK-2801", title: "联调测试", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "doing", agentSessionId: "task-AAAA1111", agentSummary: "已完成联调", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
   { id: "TASK-2802", title: "验收上线", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "done", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
 ]
 
@@ -37,6 +37,16 @@ describe("TasksModule", () => {
     }
     expect(screen.getByText("TASK-2800")).toBeInTheDocument()
     expect(screen.getByText("联调测试")).toBeInTheDocument()
+  })
+
+  it("任务卡显示 agent 会话徽章与完成摘要", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, { ok: true, data: TASKS })))
+    render(<TasksModule />)
+    await screen.findByText("导出 CSV")
+    expect(screen.getByLabelText("agent session")).toBeInTheDocument()
+    expect(screen.getByText("已完成联调")).toBeInTheDocument()
+    const badge = screen.getByLabelText("agent session")
+    expect(badge.closest("[draggable]")?.textContent).toContain("TASK-2801")
   })
 
   it("拖拽迁卡：drop → PATCH status，乐观更新列归属", async () => {
