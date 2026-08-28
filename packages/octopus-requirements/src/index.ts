@@ -5,6 +5,21 @@ import { serveStaticFiles } from "octopus"
 import { createRequirementApiHandler } from "./routes.js"
 import { RequirementStore } from "./store.js"
 
+export type {
+  Priority,
+  RequirementInput,
+  RequirementPatch,
+  RequirementRecord,
+  RequirementSource,
+  RequirementStatus,
+} from "./types.js"
+
+declare module "@deepseek-ai/cordis" {
+  interface Context {
+    requirementStore: import("./store.js").RequirementStore
+  }
+}
+
 export const name = "octopus-requirements"
 export const inject = ["workbench", "webServer", "storageDomain"]
 
@@ -17,6 +32,7 @@ export function apply(ctx: Context) {
   // 统一放进 effect：插件被 dispose 时异步清理会被等待，避免资源泄漏
   ctx.effect(async () => {
     const store = await RequirementStore.open(ctx)
+    ctx.provide("requirementStore", store)
 
     const disposers: (() => void)[] = [
       ctx.workbench.register({
