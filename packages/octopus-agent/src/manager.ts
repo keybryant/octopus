@@ -53,6 +53,16 @@ export interface ApprovalLike {
 export type ApprovalOutcomeLike = "allow" | "deny" | "cancelled"
 export type ApprovalDecision = "allow" | "deny"
 
+export interface QuestionAnswer {
+  id: string
+  selected: string[]
+  custom?: string
+}
+
+export interface QuestionAnswers {
+  answers: QuestionAnswer[]
+}
+
 export interface AgentRawApi {}
 
 export interface ManagerDeps {
@@ -81,6 +91,19 @@ interface PendingApproval {
   resolve: (outcome: ApprovalOutcomeLike) => void
 }
 
+interface PendingQuestion {
+  qid: string
+  callerItemId: string
+  sessionId: string
+  resolve(answers: QuestionAnswers): void
+}
+
+export interface QuestionItem {
+  callerItemId: string
+  question: string
+  options?: string[]
+}
+
 type IndexEventInput = Parameters<EventIndex["append"]>[0]
 
 interface SessionEntry {
@@ -88,8 +111,10 @@ interface SessionEntry {
   handle: AgentHandleLike | null
   index: EventIndex
   pendingApprovals: Map<string, PendingApproval>
+  pendingQuestions: Map<string, PendingQuestion>
   lastActivityMs: number
   approvalSeq: number
+  questionSeq: number
 }
 
 export class AgentManager {
@@ -133,8 +158,10 @@ export class AgentManager {
       handle,
       index: new EventIndex(),
       pendingApprovals: new Map(),
+      pendingQuestions: new Map(),
       lastActivityMs: this.currentNow(),
       approvalSeq: 0,
+      questionSeq: 0,
     }
     this.entries.set(id, entry)
     this.listenLive(entry, handle)
@@ -175,8 +202,10 @@ export class AgentManager {
       handle,
       index,
       pendingApprovals: new Map(),
+      pendingQuestions: new Map(),
       lastActivityMs: this.currentNow(),
       approvalSeq: 0,
+      questionSeq: 0,
     }
     this.entries.set(id, entry)
     this.listenLive(entry, handle)
@@ -223,7 +252,7 @@ export class AgentManager {
     for (const [id, entry] of [...this.entries]) {
       const handle = entry.handle
       if (handle && ttlMs > 0 && handle.agent.status === "idle" && now - entry.lastActivityMs > ttlMs) {
-        this.settleApprovals(entry)
+        this.settlePending(entry)
         await handle.dispose().catch(() => {})
         this.entries.delete(id)
       }
@@ -261,11 +290,34 @@ export class AgentManager {
     return (await this.ensureLoaded(id)).index
   }
 
-  async send(id: string, text: string): Promise<void> {
+  async send(id: string, text: string, answerQuestionId?: string): Promise<void> {
+    const entry = this.entries.get(id)
+    if (answerQuestionId !== undefined) {
+      const pending = entry?.pendingQuestions.get(answerQuestionId)
+      if (pending) {
+        pending.resolve({ answers: [{ id: pending.callerItemId, selected: [], custom: text }] })
+        entry?.pendingQuestions.delete(answerQuestionId)
+        if (entry) entry.lastActivityMs = this.currentNow()
+        return
+      }
+    }
     const handle = this.requireLive(id)
     handle.agent.followup({ role: "user", content: [{ type: "text", text }], source: { kind: "user" } })
-    const entry = this.entries.get(id)
     if (entry) entry.lastActivityMs = this.currentNow()
+  }
+
+  beginQuestion(sessionId: string, item: QuestionItem): { qid: string; answerPromise: Promise<QuestionAnswers> } {
+    const entry = this.entries.get(sessionId)
+    if (!entry) throw new ManagerError("SESSION_NOT_FOUND", `session ${sessionId} not found`)
+    const qid = `${sessionId}:q${entry.questionSeq++}`
+    let resolveAnswers!: (answers: QuestionAnswers) => void
+    const answerPromise = new Promise<QuestionAnswers>((resolve) => {
+      resolveAnswers = resolve
+    })
+    entry.pendingQuestions.set(qid, { qid, callerItemId: item.callerItemId, sessionId, resolve: resolveAnswers })
+    entry.index.append({ type: "question", id: qid, question: item.question, options: item.options })
+    entry.lastActivityMs = this.currentNow()
+    return { qid, answerPromise }
   }
 
   async cancel(id: string): Promise<void> {
@@ -279,7 +331,7 @@ export class AgentManager {
   }
 
   private async dropEntry(entry: SessionEntry): Promise<void> {
-    this.settleApprovals(entry)
+    this.settlePending(entry)
     if (entry.handle) await entry.handle.dispose().catch(() => {})
     this.entries.delete(entry.meta.id)
   }
@@ -302,6 +354,18 @@ export class AgentManager {
       pending.resolve("cancelled")
     }
     entry.pendingApprovals.clear()
+  }
+
+  private settleQuestions(entry: SessionEntry): void {
+    for (const pending of entry.pendingQuestions.values()) {
+      pending.resolve({ answers: [] })
+    }
+    entry.pendingQuestions.clear()
+  }
+
+  private settlePending(entry: SessionEntry): void {
+    this.settleApprovals(entry)
+    this.settleQuestions(entry)
   }
 
   setPendingApprovalForTest(sessionId: string, approvalId: string): void {

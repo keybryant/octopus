@@ -192,4 +192,35 @@ describe("AgentManager", () => {
     agents.resume.mockRejectedValue(new Error("loop down"))
     await expect(resumeFails.resume("oct-AAAAAAA1")).rejects.toMatchObject({ code: "AGENT_LOOP_UNAVAILABLE" })
   })
+
+  it("begins a question event and resolves it through send with answerQuestionId without followup", async () => {
+    const { manager, agents } = makeManager()
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    const { qid, answerPromise } = manager.beginQuestion(meta.id, { callerItemId: "ask-1", question: "pick?", options: ["a", "b"] })
+    expect(qid).toBe(`${meta.id}:q0`)
+    const idx = await manager.getIndex(meta.id)
+    expect(idx.list()).toHaveLength(1)
+    expect(idx.list()[0]).toMatchObject({ type: "question", id: qid, question: "pick?", options: ["a", "b"] })
+    await manager.send(meta.id, "answer", qid)
+    await expect(answerPromise).resolves.toEqual({ answers: [{ id: "ask-1", selected: [], custom: "answer" }] })
+    expect(handle.agent.followup).not.toHaveBeenCalled()
+    expect(manager.getStatus(meta.id)).toMatchObject({ live: true })
+  })
+
+  it("falls back to the normal message path when answerQuestionId matches no pending question", async () => {
+    const { manager, agents } = makeManager()
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    await manager.send(meta.id, "hello", `${meta.id}:q99`)
+    expect(handle.agent.followup).toHaveBeenCalledWith(expect.objectContaining({ source: { kind: "user" } }))
+  })
+
+  it("settles pending questions with empty answers on dispose", async () => {
+    const { manager } = makeManager()
+    const meta = await manager.create({})
+    const { answerPromise } = manager.beginQuestion(meta.id, { callerItemId: "ask-1", question: "q?" })
+    await manager.dispose(meta.id)
+    await expect(answerPromise).resolves.toEqual({ answers: [] })
+  })
 })
