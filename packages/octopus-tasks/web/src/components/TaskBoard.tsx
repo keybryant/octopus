@@ -74,7 +74,7 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
               e.dataTransfer.setData("text/plain", t.id)
               e.dataTransfer.effectAllowed = "move"
             }}
-            className={`cursor-grab rounded-xl border border-border bg-surface p-3.5 transition-opacity active:cursor-grabbing ${
+            className={`cursor-pointer rounded-xl border border-border bg-surface p-3.5 transition-colors duration-fast hover:bg-surface-hover ${
               t.status === "done" ? "opacity-75" : ""
             }`}
           >

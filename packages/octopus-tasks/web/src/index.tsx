@@ -123,10 +123,9 @@ export default function TasksModule() {
 
   return (
     <section className="p-4">
-      <div className="mb-3 flex items-center gap-3">
-        <h2 className="text-base font-semibold">任务看板</h2>
-        <span className="text-xs text-text-faint">共 {tasks.length} 个</span>
-        <span className="text-[11px] text-text-faint">从需求列表行内「拆解任务」入口拆分新任务</span>
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-xs text-text-faint">从需求列表行内「拆解任务」入口拆分新任务</span>
+        <span className="font-mono text-[11px] text-text-faint">{tasks.length} 个</span>
       </div>
 
       {loading ? (
