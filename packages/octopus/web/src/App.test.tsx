@@ -150,7 +150,7 @@ describe("App (v5 agent homepage)", () => {
     await waitFor(() => expect(screen.getByTestId("session-switcher")).toBeEnabled())
     await user.click(screen.getByTestId("session-switcher"))
     await user.click(await screen.findByText("新建会话"))
-    expect(startSessionSpy).toHaveBeenCalledWith({ cwd: "/real/ws" })
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/real/ws" })))
   })
 
   it("artifacts rail collapses and restores", async () => {

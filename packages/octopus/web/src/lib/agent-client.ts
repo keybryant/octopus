@@ -4,6 +4,7 @@ import type {
   AgentStreamEvent,
   Artifact,
   MessageBlock,
+  PresetInfo,
   SessionMeta,
 } from "./types"
 
@@ -162,6 +163,12 @@ export function createMockAgentClient(delayMs = 600): AgentClient {
     async cancel(): Promise<void> {},
     async disposeSession(): Promise<void> {},
     async answerApproval(): Promise<void> {},
+    async listPresets(): Promise<PresetInfo[]> {
+      return [
+        { id: "standard", name: "标准模式" },
+        { id: "minimal", name: "最小模式" },
+      ]
+    },
   }
 }
 
@@ -282,11 +289,11 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
         })
       })
     },
-    async startSession(opts?: { cwd?: string }): Promise<string> {
+    async startSession(opts?: { cwd?: string; agentPreset?: string }): Promise<string> {
       const res = await fetch(`${baseUrl}/sessions`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cwd: opts?.cwd }),
+        body: JSON.stringify({ cwd: opts?.cwd, agentPreset: opts?.agentPreset }),
       })
       const body = (await res.json()) as { session?: SessionMeta }
       if (!body.session) throw new Error("startSession: no session in response")
@@ -325,6 +332,11 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
     async answerApproval(id: string, decision: "allow" | "deny"): Promise<void> {
       if (!sessionId) throw new Error("answerApproval: no active session")
       await post(`/sessions/${sessionId}/approvals/${id}`, { decision })
+    },
+    async listPresets(): Promise<PresetInfo[]> {
+      const res = await fetch(`${baseUrl}/presets`)
+      const body = (await res.json()) as { items?: PresetInfo[] }
+      return body.items ?? []
     },
   }
 }

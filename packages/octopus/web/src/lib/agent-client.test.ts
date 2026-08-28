@@ -268,6 +268,24 @@ describe("createHttpAgentClient", () => {
     expect(called).toContainEqual({ url: "/api/octopus-agent/sessions/s1/cancel", method: "POST" })
     expect(called).toContainEqual({ url: "/api/octopus-agent/sessions/s1/approvals/a1", method: "POST" })
   })
+
+  it("lists presets and forwards agentPreset on startSession", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/octopus-agent/presets") {
+        return plain({ items: [{ id: "standard", name: "标准模式" }] }) as never
+      }
+      if (url === "/api/octopus-agent/sessions" && init?.method === "POST") return plain({ session: SESSION_S1 }) as never
+      return plain({}) as never
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const client = createHttpAgentClient()
+    expect(await client.listPresets()).toEqual([{ id: "standard", name: "标准模式" }])
+    await client.startSession({ cwd: "/p", agentPreset: "minimal" })
+    expect(fetchMock.mock.calls.some(([input, init]) =>
+      String(input) === "/api/octopus-agent/sessions" && String(init?.body) === '{"cwd":"/p","agentPreset":"minimal"}',
+    )).toBe(true)
+  })
 })
 
 describe("createDefaultAgentClient", () => {

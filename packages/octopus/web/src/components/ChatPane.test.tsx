@@ -28,6 +28,10 @@ function createFakeClient(events?: ScriptedEvent[]) {
   const switchToSpy = vi.fn(async () => undefined)
   const historySpy = vi.fn(async () => [] as AgentStreamEvent[])
   const listSessionsSpy = vi.fn(async () => [...sessions])
+  const listPresetsSpy = vi.fn(async () => [
+    { id: "standard", name: "标准模式" },
+    { id: "minimal", name: "最小模式" },
+  ])
   const client: AgentClient = {
     startSession: startSessionSpy,
     switchTo: switchToSpy,
@@ -44,6 +48,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     disposeSession: vi.fn(async () => undefined),
     answerApproval: answerApprovalSpy,
     reply: vi.fn(async () => ({ blocks: [] })),
+    listPresets: listPresetsSpy,
   }
   const emit = (ev: ScriptedEvent): void => {
     const next: AgentStreamEvent = { ...ev, idx: ++idx } as AgentStreamEvent
@@ -59,6 +64,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     switchToSpy,
     historySpy,
     listSessionsSpy,
+    listPresetsSpy,
   }
 }
 
@@ -139,7 +145,9 @@ describe("ChatPane", () => {
 
     await user.click(screen.getByRole("button", { name: /会话/ }))
     await user.click(await screen.findByText("新建会话"))
-    expect(fake.startSessionSpy).toHaveBeenCalledWith({ cwd: "C:/repo" })
+    await waitFor(() =>
+      expect(fake.startSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ cwd: "C:/repo" })),
+    )
     await waitFor(() => expect(screen.queryByText("旧消息")).not.toBeInTheDocument())
     await waitFor(() => expect(screen.getByText(/当前上下文/)).toBeInTheDocument())
     expect(screen.queryByText("新建会话")).not.toBeInTheDocument()
@@ -188,5 +196,23 @@ describe("ChatPane", () => {
     await user.keyboard("{Enter}")
     await waitFor(() => expect(fake.sendSpy).toHaveBeenCalledWith("main", "q1"))
     await waitFor(() => expect(screen.queryByTitle("pending-question")).not.toBeInTheDocument())
+  })
+
+  it("preset switcher lists presets and new session forwards the selection", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    render(<ChatPane agentClient={fake.client} currentCwd="/ws" />)
+    const trigger = await screen.findByTestId("preset-switcher")
+    await waitFor(() => expect(fake.listPresetsSpy).toHaveBeenCalled())
+
+    await user.click(trigger)
+    await user.click(await screen.findByTestId("preset-option-minimal"))
+    await waitFor(() => expect(trigger).toHaveTextContent("预设：最小模式"))
+
+    await user.click(screen.getByTestId("session-switcher"))
+    await user.click(await screen.findByTestId("session-new"))
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ cwd: "/ws", agentPreset: "minimal" }),
+    ))
   })
 })

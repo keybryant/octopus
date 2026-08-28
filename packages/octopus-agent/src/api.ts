@@ -1,5 +1,5 @@
 import { ManagerError } from "./manager.js"
-import type { AgentStreamEvent, CreateSessionInput, SessionMeta } from "./types.js"
+import type { AgentStreamEvent, CreateSessionInput, PresetInfo, SessionMeta } from "./types.js"
 
 export const BASE_PATH = "/api/octopus-agent"
 
@@ -26,6 +26,7 @@ export interface IndexLike {
 }
 
 export interface ApiDeps {
+  listPresets(): Promise<{ items: PresetInfo[]; defaultId: string | null }>
   manager: {
     create(input: CreateSessionInput): Promise<SessionMeta>
     list(): Promise<SessionMeta[]>
@@ -118,6 +119,10 @@ export function createAgentApi(deps: ApiDeps): (req: ApiRequest, res: ApiRespons
       }
       if (method === "GET" && first === "up") {
         sendJson(res, 200, { ok: true })
+        return
+      }
+      if (method === "GET" && first === "presets" && segs.length === 1) {
+        sendJson(res, 200, await deps.listPresets())
         return
       }
       if (first !== "sessions") {

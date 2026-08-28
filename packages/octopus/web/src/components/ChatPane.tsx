@@ -11,7 +11,7 @@ import {
   Spinner,
 } from "octopus-ui"
 import { History, Plus } from "octopus-ui"
-import type { AgentClient, Artifact, SessionMeta } from "../lib/types"
+import type { AgentClient, Artifact, PresetInfo, SessionMeta } from "../lib/types"
 import { useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
 import { Composer } from "./Composer"
@@ -30,6 +30,24 @@ function sessionHeader(): string {
   return `今天 ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")} 开始 · 会话 #47`
 }
 
+const PRESET_STORAGE_KEY = "octopus.agentPreset"
+
+function readStoredPreset(): string | null {
+  try {
+    return localStorage.getItem(PRESET_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function storePreset(id: string): void {
+  try {
+    localStorage.setItem(PRESET_STORAGE_KEY, id)
+  } catch {
+    /* 隐私模式等场景忽略 */
+  }
+}
+
 export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPaneProps) {
   const { messages, status, send, artifacts, pendingQuestion, decideApproval, switchSession, newSession } =
     useChat(agentClient)
@@ -37,6 +55,8 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   const [decidedIds, setDecidedIds] = useState<Set<string>>(new Set())
+  const [presets, setPresets] = useState<PresetInfo[]>([])
+  const [presetId, setPresetId] = useState<string | null>(() => readStoredPreset())
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const refreshSessions = useCallback(async () => {
@@ -49,6 +69,16 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
       /* 保留上次列表 */
     }
   }, [agentClient])
+
+  useEffect(() => {
+    if (presets.length > 0 || !agentClient) return
+    void agentClient.listPresets().then((list) => {
+      setPresets(list)
+      setPresetId((prev) => prev ?? list[0]?.id ?? null)
+    }).catch(() => undefined)
+  }, [agentClient, presets.length])
+
+  const selectedPreset = presets.find((p) => p.id === presetId) ?? null
 
   useEffect(() => {
     const el = scrollRef.current
@@ -66,7 +96,10 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
 
   const handleNewSession = async () => {
     try {
-      const id = await newSession({ cwd: currentCwd })
+      const id = await newSession({
+        cwd: currentCwd,
+        agentPreset: presetId && presets.length > 0 ? presetId : undefined,
+      })
       setCurrentSessionId(id)
     } catch {
       /* 保持当前会话 */
@@ -89,7 +122,38 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
               <History className="h-3.5 w-3.5" />
               {sessionHeader()}
             </div>
-            <DropdownMenu open={sessionsOpen} onOpenChange={handleOpenSessions}>
+            <div className="flex items-center gap-1.5">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    disabled={!agentClient}
+                    title="Agent 预设"
+                    data-testid="preset-switcher"
+                  >
+                    <ChevronDown className="h-3.5 w-3.5" />
+                    预设：{selectedPreset?.name ?? selectedPreset?.id ?? "未设置"}
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-[220px]">
+                  {presets.map((p) => (
+                    <DropdownMenuItem
+                      key={p.id}
+                      data-testid={`preset-option-${p.id}`}
+                      onSelect={() => {
+                        setPresetId(p.id)
+                        storePreset(p.id)
+                      }}
+                    >
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{p.name ?? p.id}</span>
+                      {p.id === presetId && <Check className="h-4 w-4 shrink-0 text-accent" />}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <DropdownMenu open={sessionsOpen} onOpenChange={handleOpenSessions}>
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
@@ -125,6 +189,7 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </div>
 
           {messages.map((m) => (

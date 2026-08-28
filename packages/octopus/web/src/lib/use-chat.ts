@@ -205,7 +205,7 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
   decideApproval: (id: string, decision: "allow" | "deny") => void
   thinking: boolean
   switchSession: (id: string) => Promise<void>
-  newSession: (opts?: { cwd?: string }) => Promise<string>
+  newSession: (opts?: { cwd?: string; agentPreset?: string }) => Promise<string>
 } {
   const [state, setState] = useState<ChatState>(() => initialState(opts?.contextLabel))
   const stateRef = useRef(state)
@@ -280,7 +280,7 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
     setState(next)
   }, [])
 
-  const newSession = useCallback(async (sessionOpts?: { cwd?: string }) => {
+  const newSession = useCallback(async (sessionOpts?: { cwd?: string; agentPreset?: string }) => {
     const c = clientRef.current
     if (!c) throw new Error("useChat: client is not ready")
     const id = await c.startSession(sessionOpts)

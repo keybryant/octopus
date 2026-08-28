@@ -18,6 +18,8 @@ interface StubManager {
   answerApproval: Mock<(id: string, approvalId: string, decision: "allow" | "deny") => Promise<void>>
 }
 
+const DEFAULT_PRESETS = { items: [{ id: "standard", name: "鏍囧噯妯″紡" }], defaultId: "standard" as string | null }
+
 function fakeReq(method: string, url: string, body?: unknown): { req: ApiRequest; emitClose: () => void } {
   const text = body === undefined ? "" : typeof body === "string" ? body : JSON.stringify(body)
   let closeListener: (() => void) | undefined
@@ -74,23 +76,38 @@ function makeStub(overrides: Partial<StubManager> = {}) {
   }
   return {
     manager,
+    listPresets: vi.fn(async () => DEFAULT_PRESETS),
     index,
     append: (event: AgentStreamEvent) => { events.push({ ...event, idx: events.length } as AgentStreamEvent) },
   }
 }
 
+function depsOf(stub: ReturnType<typeof makeStub>): Parameters<typeof createAgentApi>[0] {
+  const { listPresets, manager } = stub
+  return { manager, listPresets }
+}
+
 describe("octopus-agent api", () => {
   it("up probe returns ok", async () => {
-    const handler = createAgentApi({ manager: makeStub().manager })
+    const handler = createAgentApi(depsOf(makeStub()))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/up`).req, res.res)
     expect(res.code()).toBe(200)
     expect(JSON.parse(res.text())).toEqual({ ok: true })
   })
+  it("lists agent presets with default id", async () => {
+    const stub = makeStub()
+    const handler = createAgentApi(depsOf(stub))
+    const res = fakeRes()
+    await handler(fakeReq("GET", `${BASE_PATH}/presets`).req, res.res)
+    expect(res.code()).toBe(200)
+    expect(JSON.parse(res.text())).toEqual(DEFAULT_PRESETS)
+    expect(stub.listPresets).toHaveBeenCalledOnce()
+  })
 
   it("creates a session", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions`, { cwd: "/tmp/work", agentPreset: "standard", provider: "deepseek-official", model: "deepseek-v4-flash" }).req, res.res)
     expect(res.code()).toBe(201)
@@ -100,7 +117,7 @@ describe("octopus-agent api", () => {
 
   it("rejects a relative cwd", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions`, { cwd: "relative/path" }).req, res.res)
     expect(res.code()).toBe(400)
@@ -110,7 +127,7 @@ describe("octopus-agent api", () => {
 
   it("rejects invalid json body", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions`, "{bad").req, res.res)
     expect(res.code()).toBe(400)
@@ -119,7 +136,7 @@ describe("octopus-agent api", () => {
 
   it("lists sessions", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/sessions`).req, res.res)
     expect(res.code()).toBe(200)
@@ -128,7 +145,7 @@ describe("octopus-agent api", () => {
 
   it("streams history for a session", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/history`).req, res.res)
     expect(res.code()).toBe(200)
@@ -144,7 +161,7 @@ describe("octopus-agent api", () => {
     const stub = makeStub({
       getIndex: vi.fn(async () => { throw new ManagerError("SESSION_NOT_FOUND", "session nope not found") }),
     })
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/sessions/nope/history`).req, res.res)
     expect(res.code()).toBe(404)
@@ -153,7 +170,7 @@ describe("octopus-agent api", () => {
 
   it("returns status for a session", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/status`).req, res.res)
     expect(res.code()).toBe(200)
@@ -162,7 +179,7 @@ describe("octopus-agent api", () => {
 
   it("posts a message", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions/oct-AAAAAAA1/messages`, { text: "hello", answerQuestionId: "q1" }).req, res.res)
     expect(res.code()).toBe(200)
@@ -172,7 +189,7 @@ describe("octopus-agent api", () => {
 
   it("rejects a blank message", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions/oct-AAAAAAA1/messages`, { text: "   " }).req, res.res)
     expect(res.code()).toBe(400)
@@ -181,7 +198,7 @@ describe("octopus-agent api", () => {
 
   it("cancels a session", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions/oct-AAAAAAA1/cancel`).req, res.res)
     expect(res.code()).toBe(200)
@@ -191,7 +208,7 @@ describe("octopus-agent api", () => {
 
   it("disposes a session", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("DELETE", `${BASE_PATH}/sessions/oct-AAAAAAA1`).req, res.res)
     expect(res.code()).toBe(200)
@@ -201,7 +218,7 @@ describe("octopus-agent api", () => {
 
   it("answers an approval", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions/oct-AAAAAAA1/approvals/oct-AAAAAAA1:a0`, { decision: "deny" }).req, res.res)
     expect(res.code()).toBe(200)
@@ -211,7 +228,7 @@ describe("octopus-agent api", () => {
 
   it("rejects an invalid approval decision", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const res = fakeRes()
     await handler(fakeReq("POST", `${BASE_PATH}/sessions/oct-AAAAAAA1/approvals/oct-AAAAAAA1:a0`, { decision: "maybe" }).req, res.res)
     expect(res.code()).toBe(400)
@@ -220,7 +237,7 @@ describe("octopus-agent api", () => {
 
   it("streams events via sse", async () => {
     const stub = makeStub()
-    const handler = createAgentApi({ manager: stub.manager })
+    const handler = createAgentApi(depsOf(stub))
     const { req, emitClose } = fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/events?after=1`)
     const res = fakeRes()
     vi.useFakeTimers()
@@ -246,7 +263,7 @@ describe("octopus-agent api", () => {
   })
 
   it("returns 404 for an unknown route", async () => {
-    const handler = createAgentApi({ manager: makeStub().manager })
+    const handler = createAgentApi(depsOf(makeStub()))
     const res = fakeRes()
     await handler(fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/unknown`).req, res.res)
     expect(res.code()).toBe(404)

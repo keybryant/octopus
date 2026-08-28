@@ -17,3 +17,4 @@ export interface CreateSessionInput {
   provider?: string
   model?: string
 }
+export interface PresetInfo { id: string; name?: string; description?: string }

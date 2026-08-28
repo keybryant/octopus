@@ -32,6 +32,7 @@ function createFakeClient() {
     cancel: vi.fn(async () => undefined),
     disposeSession: vi.fn(async () => undefined),
     answerApproval: answerApprovalSpy,
+    listPresets: vi.fn(async () => [{ id: "standard", name: "标准模式" }]),
     reply: vi.fn(async () => ({ blocks: [] })),
   }
   const emit = (ev: ScriptedEvent): void => {

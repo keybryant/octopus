@@ -4,6 +4,8 @@ import type { Context } from "@deepseek-ai/cordis"
 import { createAgentApi, BASE_PATH, type ApiRequest, type ApiResponse } from "./api.js"
 import { AgentManager, type AgentsLike, type PersistenceLike } from "./manager.js"
 
+import type { PresetInfo } from "./types.js"
+
 export const name = "octopus-agent"
 export const inject = ["webServer", "agents"]
 
@@ -54,9 +56,29 @@ function degradedHandler(req: ApiRequest, res: ApiResponse): Promise<void> {
 
 function registerRoute(ctx: Context, manager: AgentManager | null): () => void {
   const webServer = ctx.get("webServer") as WebServerLike
-  const handler = manager ? createAgentApi({ manager }) : degradedHandler
+  const handler = manager ? createAgentApi({ manager, listPresets: () => resolvePresets(ctx) }) : degradedHandler
   const disposeRoute = webServer.register({ kind: "prefix", path: BASE_PATH, handler })
   return () => { disposeRoute() }
+}
+
+interface AgentPresetsLike {
+  list(): Promise<{ id: string; name?: string; description?: string }[]>
+  defaultId: string
+}
+
+async function resolvePresets(ctx: Context): Promise<{ items: PresetInfo[]; defaultId: string | null }> {
+  try {
+    const presets = ctx.get("agentPresets") as AgentPresetsLike | undefined
+    if (!presets?.defaultId) return { items: [], defaultId: null }
+    const items = await presets
+      .list()
+      .then((list) => list.map((p) => ({ id: p.id, name: p.name, description: p.description })))
+      .catch(() => [] as PresetInfo[])
+    if (items.length === 0) return { items: [], defaultId: presets.defaultId }
+    return { items, defaultId: presets.defaultId }
+  } catch {
+    return { items: [], defaultId: null }
+  }
 }
 
 export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Promise<void> {

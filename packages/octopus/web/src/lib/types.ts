@@ -82,7 +82,7 @@ export interface AgentReply {
  * 且行为不得依赖注册顺序。
  */
 export interface AgentClient {
-  startSession(opts?: { cwd?: string }): Promise<string>
+  startSession(opts?: { cwd?: string; agentPreset?: string }): Promise<string>
   switchTo(sessionId: string): Promise<void>
   listSessions(): Promise<SessionMeta[]>
   history(sessionId: string): Promise<AgentStreamEvent[]>
@@ -91,6 +91,7 @@ export interface AgentClient {
   cancel(): Promise<void>
   disposeSession(): Promise<void>
   answerApproval(id: string, decision: "allow" | "deny"): Promise<void>
+  listPresets(): Promise<PresetInfo[]>
   reply(input: string): Promise<AgentReply>
 }
 
@@ -112,6 +113,12 @@ export interface SessionMeta {
   cwd: string | null
   title: string | null
   live: boolean
+}
+
+export interface PresetInfo {
+  id: string
+  name?: string
+  description?: string
 }
 
 export type ApprovalBlock = { kind: "approval"; approvalId: string; toolName: string; reason?: string }
