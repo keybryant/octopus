@@ -1,6 +1,6 @@
 # octopus
 
-DeepSeek Harness 个人专属工作台：壳插件 `octopus` + 功能插件（当前为 `octopus-quickstart`）。
+DeepSeek Harness 个人专属工作台：壳插件 `octopus` + 一组功能插件（quickstart / projects / requirements / tasks / agent / users-view / auth 等）。
 
 ## 快速开始
 
@@ -13,11 +13,27 @@ pnpm dev:noopen # 同上但不打开浏览器
 
 **说明**：`octopus-agent` 挂载后，工作台聊天即为真实 dsh agent 会话（需 `DEEPSEEK_API_KEY` 环境变量或 `$DSH_HOME/settings.yaml` 的 `llm-deepseek` 段）；未挂载时聊天自动回退脚本 mock。Agent 的审批/问题通道在聊天内以按钮/横幅呈现；会话权限沿用平台 `workspace-write`。
 
+> **⚠️ 工具模式必设**：使用 DeepSeek 模型时（`llm-deepseek`），工作台会话必须开启 dsh 的 code-mode 工具流，否则模型输出的 DSML 工具调用（`<DSML工具:tool_calls>`）只会作为文本透传，**不会执行**（表现为“agent 只会聊天，不调工具/不加载 skill”）。在 profile 的 `cordis.patch.yml` 设置：
+>
+> ```yaml
+> - id: tools
+>   config:
+>     mode: code       # 或 both
+> ```
+>
+> 开启后即为 dsh 原生完整循环：DSML → `run_code`/注册工具真实执行 → 结果（含错误）回传模型 → 多轮迭代，skill/subagent/workflow 同标准预设一应俱全。
+
 ## 结构
 
 - `packages/octopus`：工作台壳插件，提供 `ctx.workbench` 服务契约与 `/workbench` 页面
+- `packages/octopus-ui`：设计系统包（非插件）：设计令牌、主题 Provider、基础组件与浮层
+- `packages/octopus-users`：用户存储服务插件，用户表落盘（storage-json）
+- `packages/octopus-auth`：权限体系插件：登录 / 会话 / 角色，`single-user` 直通或 `multi-user` 管控
+- `packages/octopus-users-view`：「用户管理」模块插件，管理员可禁用 / 降级普通用户
 - `packages/octopus-quickstart`：示例功能插件，验证模块注册与懒加载链路
 - `packages/octopus-projects`：项目管理服务插件，持久化项目并暴露 `/api/octopus-projects` CRUD，自动创建 dsh 工作区
+- `packages/octopus-requirements`：需求管理模块插件：需求 CRUD、状态流转与本地持久化
+- `packages/octopus-tasks`：任务管理模块插件：任务从需求拆解，4 列看板 + 拖拽迁卡
 - `packages/octopus-agent`：工作台 Agent 会话服务：dsh AgentLoop 真实会话 + `/api/octopus-agent`；未挂载时聊天回退脚本 mock
 
 ## 新增功能插件
@@ -38,7 +54,7 @@ pnpm dev:noopen # 同上但不打开浏览器
 
 - 将 `octopus-auth.mode` 设为 `single-user`：`/workbench` 免登录直通，行为等同旧版；
 - 认证后端使用 storage-json（`octopus-auth.backend = "json"`，默认），需在配置中为后端指定 `root` 目录（用户表落盘目录）；
-- 五个包全部安装（`pnpm dev` 已按依赖顺序挂载 octopus → octopus-users → octopus-auth → octopus-users-view → octopus-quickstart），行为差异只在运行模式。
+- 九个插件包全部安装（`pnpm dev` 已按依赖顺序挂载 octopus → octopus-users → octopus-auth → octopus-users-view → octopus-quickstart → octopus-projects → octopus-requirements → octopus-tasks → octopus-agent；`octopus-ui` 为纯库不挂载），行为差异只在运行模式。
 
 ### 公网部署（四强制项）
 
