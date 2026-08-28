@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, type Mock } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { Config, apply, inject, name } from "./index.js"
 import { BASE_PATH } from "./api.js"
 
@@ -140,49 +140,28 @@ describe("octopus-agent plugin apply", () => {
     }
   })
 
-  it("bridges user questions through the message endpoint", async () => {
-    const webServer = { register: vi.fn((route: unknown) => () => {}) }
-    const create = vi.fn(async (options: { sessionId: string }) => {
-      return {
-        agent: {
-          id: options.sessionId,
-          status: "idle",
-          ctx: { on: vi.fn() },
-          followup: vi.fn(),
-          cancel: vi.fn(),
-        },
-        dispose: vi.fn(async () => {}),
-      }
-    })
-    const agents = { create, resume: vi.fn(async () => { throw new Error("no loop") }) }
-    const registerProvider = vi.fn()
-    const { ctx } = stubCtx({
-      webServer,
-      agents,
-      sessionPersistence: stubPersistence(),
-      agentDefaultModel: undefined,
-      userQuestions: { registerProvider },
-    })
-    await (apply as (c: typeof ctx, config: unknown) => Promise<void>)(ctx, Config())
-    expect(registerProvider).toHaveBeenCalledTimes(1)
-    const ask = registerProvider.mock.calls[0][0] as { ask: Mock<(request: unknown) => Promise<unknown>> }
-    const route = webServer.register.mock.calls[0][0] as Route
-    const created = fakeRes()
-    await route.handler(fakeReq("POST", `${BASE_PATH}/sessions`, { cwd: "/x" }) as never, created.res as never)
-    const sessionId = (JSON.parse(created.text()) as { session: { id: string } }).session.id
-    const answerPromise = ask.ask({
-      agent: { id: sessionId },
-      questions: [{ id: "ask-1", question: "go on?", options: ["yes", "no"] }],
-    }) as Promise<{ answers: Array<{ id: string; selected: string[]; custom?: string }> }>
-    const history = fakeRes()
-    await route.handler(fakeReq("GET", `${BASE_PATH}/sessions/${sessionId}/history`) as never, history.res as never)
-    const events = (JSON.parse(history.text()) as { events: Array<{ type: string; id: string }> }).events
-    expect(events[0]).toMatchObject({ type: "question", id: `${sessionId}:q0`, question: "go on?", options: ["yes", "no"] })
-    await route.handler(
-      fakeReq("POST", `${BASE_PATH}/sessions/${sessionId}/messages`, { text: "yes", answerQuestionId: events[0].id }) as never,
-      fakeRes().res as never,
-    )
-    await expect(answerPromise).resolves.toEqual({ answers: [{ id: "ask-1", selected: [], custom: "yes" }] })
-    await expect(ask.ask({ questions: [{ id: "ask-1", question: "q?" }] })).rejects.toThrow("[octopus-agent] question without agent")
+  it("does not register a user-questions provider and warns once at boot", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
+    try {
+      vi.resetModules()
+      const fresh = await import("./index.js")
+      const webServer = { register: vi.fn((route: unknown) => () => {}) }
+      const agents = stubAgents()
+      const registerProvider = vi.fn()
+      const { ctx } = stubCtx({
+        webServer,
+        agents,
+        sessionPersistence: stubPersistence(),
+        agentDefaultModel: undefined,
+        userQuestions: { registerProvider },
+      })
+      await (fresh.apply as (c: typeof ctx, config: unknown) => Promise<void>)(ctx, Config())
+      expect(registerProvider).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith("[octopus-agent] ask_user_question bridge inactive: the web profile owns the global user-questions provider")
+      await (fresh.apply as (c: typeof ctx, config: unknown) => Promise<void>)(ctx, Config())
+      expect(warnSpy).toHaveBeenCalledTimes(1)
+    } finally {
+      warnSpy.mockRestore()
+    }
   })
 })

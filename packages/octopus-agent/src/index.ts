@@ -29,32 +29,8 @@ interface DefaultModelLike {
   currentSelection?(): { provider?: string; model?: string } | undefined
 }
 
-interface QuestionOptionLike {
-  label?: string
-  value?: string
-}
-
-interface QuestionItemLike {
-  id: string
-  question: string
-  options?: (string | QuestionOptionLike)[]
-}
-
-interface UserQuestionsAsk {
-  questions?: QuestionItemLike[]
-  agent?: { id?: string } | null
-  signal?: AbortSignal
-}
-
-interface UserQuestionsProvider {
-  ask(request: UserQuestionsAsk): Promise<{ answers: Array<{ id: string; selected: string[]; custom?: string }> }>
-}
-
-interface UserQuestionsLike {
-  registerProvider(provider: UserQuestionsProvider): unknown
-}
-
 const RANDOM_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+let userQuestionsWarned = false
 
 function createSessionId(): string {
   let suffix = ""
@@ -83,35 +59,11 @@ function registerRoute(ctx: Context, manager: AgentManager | null): () => void {
   return () => { disposeRoute() }
 }
 
-function bridgeUserQuestions(ctx: Context, manager: AgentManager): void {
-  const userQuestions = ctx.get("userQuestions") as UserQuestionsLike | undefined
-  if (!userQuestions) return
-  try {
-    userQuestions.registerProvider({
-      ask(request) {
-        const sessionId = request.agent?.id
-        if (typeof sessionId !== "string") {
-          return Promise.reject(new Error("[octopus-agent] question without agent"))
-        }
-        const items = request.questions ?? []
-        if (items.length === 0) return Promise.resolve({ answers: [] })
-        if (items.length > 1) console.error("[octopus-agent] multiple questions asked at once; bridging only the first")
-        const first = items[0]
-        return manager.beginQuestion(sessionId, {
-          callerItemId: first.id,
-          question: first.question,
-          options: (first.options ?? []).map((option) =>
-            typeof option === "string" ? option : String(option.label ?? option.value ?? option),
-          ),
-        }).answerPromise
-      },
-    })
-  } catch (error) {
-    console.error("[octopus-agent] userQuestions provider registration failed", error)
-  }
-}
-
 export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Promise<void> {
+  if (!userQuestionsWarned) {
+    userQuestionsWarned = true
+    console.warn("[octopus-agent] ask_user_question bridge inactive: the web profile owns the global user-questions provider")
+  }
   const persistence: PersistenceLike | undefined = ctx.get("sessionPersistence")
   if (!persistence) {
     console.error("[octopus-agent] sessionPersistence unavailable")
@@ -130,7 +82,6 @@ export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Pr
     model: config.model ?? selection?.model,
     idleTtlMs: config.idleTtlMs ?? 30 * 60 * 1000,
   })
-  bridgeUserQuestions(ctx, manager)
   ctx.effect(() => {
     const disposeRoute = registerRoute(ctx, manager)
     return () => {
