@@ -101,14 +101,7 @@ export function toStreamEvent(ev: CapturedEvent): Omit<AgentStreamEvent, "idx"> 
     case "user-message": return stripIdx({ idx: 0, type: "user-message", text: ev.payload.text as string })
     case "assistant-text": return stripIdx({ idx: 0, type: "assistant-text", text: ev.payload.text as string })
     case "tool-call": return stripIdx({ idx: 0, type: "tool-call", callId: ev.payload.callId as string, name: ev.payload.name as string, summary: ev.payload.summary as string })
-    case "tool-result": {
-      const callId = ev.payload.callId as string
-      const name = ev.payload.name as string
-      const ok = ev.payload.ok as boolean
-      const preview = ev.payload.preview as string
-      const full = { idx: 0, type: "tool-result" as const, callId, name, ok, preview }
-      return stripIdx(full)
-    }
+    case "tool-result": return stripIdx({ idx: 0, type: "tool-result", callId: ev.payload.callId as string, name: ev.payload.name as string, ok: ev.payload.ok as boolean, preview: ev.payload.preview as string })
     case "turn-start": return stripIdx({ idx: 0, type: "turn", at: "start" })
     case "turn-end": return stripIdx({ idx: 0, type: "turn", at: "end", reason: ev.payload.reason as string | undefined })
     case "approval": return stripIdx({ idx: 0, type: "approval", id: ev.payload.id as string, toolName: ev.payload.toolName as string, reason: ev.payload.reason as string | undefined })

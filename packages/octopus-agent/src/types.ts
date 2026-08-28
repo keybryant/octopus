@@ -5,7 +5,7 @@ export type AgentStreamEvent = { idx: number } & (
   | { type: "user-message"; text: string }
   | { type: "assistant-text"; text: string }
   | { type: "tool-call"; callId: string; name: string; summary: string }
-  | { type: "tool-result"; callId: string; ok: boolean; preview: string }
+  | { type: "tool-result"; callId: string; name: string; ok: boolean; preview: string }
   | { type: "turn"; at: "start" | "end"; reason?: string }
   | { type: "question"; id: string; question: string; options?: string[] }
   | { type: "approval"; id: string; toolName: string; reason?: string }
