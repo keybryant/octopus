@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react"
-import { describe, expect, it } from "vitest"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { describe, expect, it, vi } from "vitest"
 import type { ChatMessage } from "../lib/types"
 import { ChatMessage as V } from "./ChatMessage"
 
@@ -111,5 +111,83 @@ describe("ChatMessage", () => {
     expect(screen.getByText("已创建任务 TASK-2851")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "暂停执行" })).toBeInTheDocument()
     expect(screen.getAllByRole("listitem")).toHaveLength(2)
+  })
+
+  it("renders approval block with title, reason and allow/deny buttons", () => {
+    const onApprovalDecision = vi.fn()
+    render(
+      <V
+        message={{
+          id: "m5",
+          role: "assistant",
+          time: "14:41",
+          blocks: [{ kind: "approval", approvalId: "a1", toolName: "bash", reason: "运行测试脚本" }],
+        }}
+        onApprovalDecision={onApprovalDecision}
+      />,
+    )
+    const box = screen.getByTestId("approval-a1")
+    expect(box).toHaveTextContent("bash")
+    expect(box).toHaveTextContent("运行测试脚本")
+    expect(screen.getByRole("button", { name: "允许" })).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument()
+  })
+
+  it("clicking allow calls onApprovalDecision with the id and allow", () => {
+    const onApprovalDecision = vi.fn()
+    render(
+      <V
+        message={{
+          id: "m6",
+          role: "assistant",
+          time: "14:41",
+          blocks: [{ kind: "approval", approvalId: "a1", toolName: "bash" }],
+        }}
+        onApprovalDecision={onApprovalDecision}
+      />,
+    )
+    fireEvent.click(screen.getByRole("button", { name: "允许" }))
+    expect(onApprovalDecision).toHaveBeenCalledWith("a1", "allow")
+    fireEvent.click(screen.getByRole("button", { name: "拒绝" }))
+    expect(onApprovalDecision).toHaveBeenCalledWith("a1", "deny")
+  })
+
+  it("disables both approval buttons when the id is decided", () => {
+    render(
+      <V
+        message={{
+          id: "m7",
+          role: "assistant",
+          time: "14:41",
+          blocks: [{ kind: "approval", approvalId: "a1", toolName: "bash" }],
+        }}
+        decidedApprovalIds={new Set(["a1"])}
+      />,
+    )
+    expect(screen.getByRole("button", { name: "允许" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeDisabled()
+  })
+
+  it("renders danger notice with danger styles and keeps info notice unchanged", () => {
+    render(
+      <V
+        message={{
+          id: "m8",
+          role: "assistant",
+          time: "14:42",
+          blocks: [
+            { kind: "notice", title: "写入失败", hint: "permission denied", tone: "danger" },
+            { kind: "notice", title: "已创建任务 TASK-2852", hint: "指派给 张三" },
+          ],
+        }}
+      />,
+    )
+    const danger = screen.getByTestId("notice-danger")
+    expect(danger).toHaveTextContent("写入失败")
+    expect(danger.querySelector(".text-danger")).not.toBeNull()
+    expect(danger.className).toContain("border-danger/40")
+    expect(danger.className).toContain("bg-danger/10")
+    const info = screen.getByText("已创建任务 TASK-2852")
+    expect(info.className).toContain("text-accent")
   })
 })

@@ -1,8 +1,10 @@
-import { Badge, Spinner } from "octopus-ui"
+import { Badge, Button, Spinner } from "octopus-ui"
 import { Check } from "octopus-ui"
 import type { BadgeTone as UiBadgeTone } from "octopus-ui"
 import type { ChatMessage as ChatMessageData, InlineSeg, MessageBlock } from "../lib/types"
 import { OctoLogo } from "./OctoLogo"
+
+export type ApprovalDecision = "allow" | "deny"
 
 /** 领域徽章色 → 设计系统语义色 */
 const badgeToneMap: Record<string, UiBadgeTone> = {
@@ -53,7 +55,15 @@ function StepRow({ state, text }: { state: "done" | "active" | "pending"; text: 
   )
 }
 
-function Block({ block }: { block: MessageBlock }) {
+function Block({
+  block,
+  onApprovalDecision,
+  decidedApprovalIds,
+}: {
+  block: MessageBlock
+  onApprovalDecision?: (id: string, decision: ApprovalDecision) => void
+  decidedApprovalIds?: ReadonlySet<string>
+}) {
   switch (block.kind) {
     case "paragraph":
       return (
@@ -126,17 +136,53 @@ function Block({ block }: { block: MessageBlock }) {
           </pre>
         </div>
       )
-    case "notice":
+    case "notice": {
+      const danger = block.tone === "danger"
       return (
-        <div className="mt-3 rounded-lg border border-border bg-background p-3">
-          <div className="text-xs font-medium text-accent">{block.title}</div>
+        <div
+          data-testid={danger ? "notice-danger" : undefined}
+          className={danger ? "mt-3 rounded-lg border border-danger/40 bg-danger/10 p-3" : "mt-3 rounded-lg border border-border bg-background p-3"}
+        >
+          <div className={danger ? "text-xs font-medium text-danger" : "text-xs font-medium text-accent"}>{block.title}</div>
           <div className="mt-0.5 text-[11px] text-text-faint">{block.hint}</div>
         </div>
       )
+    }
+    case "approval": {
+      const decided = decidedApprovalIds?.has(block.approvalId) ?? false
+      return (
+        <div data-testid={`approval-${block.approvalId}`} className="mt-3 rounded-lg border border-border bg-background p-3">
+          <div className="text-xs font-medium text-foreground">{block.toolName}</div>
+          {block.reason && <div className="mt-0.5 text-[11px] text-muted-foreground">{block.reason}</div>}
+          <div className="mt-2.5 flex gap-2">
+            <Button variant="primary" size="sm" disabled={decided} onClick={() => onApprovalDecision?.(block.approvalId, "allow")}>
+              允许
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:text-danger"
+              disabled={decided}
+              onClick={() => onApprovalDecision?.(block.approvalId, "deny")}
+            >
+              拒绝
+            </Button>
+          </div>
+        </div>
+      )
+    }
   }
 }
 
-export function ChatMessage({ message }: { message: ChatMessageData }) {
+export function ChatMessage({
+  message,
+  onApprovalDecision,
+  decidedApprovalIds,
+}: {
+  message: ChatMessageData
+  onApprovalDecision?: (id: string, decision: ApprovalDecision) => void
+  decidedApprovalIds?: ReadonlySet<string>
+}) {
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
@@ -159,7 +205,7 @@ export function ChatMessage({ message }: { message: ChatMessageData }) {
         <div className="rounded-xl rounded-tl-sm border border-border bg-surface px-4 py-3.5 text-[13.5px] leading-relaxed text-muted-foreground">
           {message.text && <p>{message.text}</p>}
           {message.blocks?.map((b, i) => (
-            <Block key={i} block={b} />
+            <Block key={i} block={b} onApprovalDecision={onApprovalDecision} decidedApprovalIds={decidedApprovalIds} />
           ))}
         </div>
         {message.meta && (
