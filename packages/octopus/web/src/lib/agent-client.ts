@@ -124,7 +124,7 @@ export function createMockAgentClient(delayMs = 600): AgentClient {
     for (const handler of [...handlers]) handler(next)
   }
 
-  async function send(text: string): Promise<void> {
+  async function send(text: string, _answerQuestionId?: string): Promise<void> {
     const timeline: ScriptedEvent[] = [
       { type: "user-message", text },
       { type: "turn", at: "start" },
@@ -246,9 +246,12 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
     }
   }
 
-  async function send(text: string): Promise<void> {
+  async function send(text: string, answerQuestionId?: string): Promise<void> {
     if (!sessionId) throw new Error("send: no active session")
-    await post(`/sessions/${sessionId}/messages`, { text })
+    await post(
+      `/sessions/${sessionId}/messages`,
+      answerQuestionId !== undefined ? { text, answerQuestionId } : { text },
+    )
   }
 
   return {

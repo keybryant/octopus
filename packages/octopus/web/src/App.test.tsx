@@ -117,8 +117,9 @@ describe("App (v5 agent homepage)", () => {
     const box = await screen.findByPlaceholderText(/给 Octo Agent 下指令/)
     await user.type(box, "列出优先事项")
     fireEvent.keyDown(box, { key: "Enter" })
-    expect(await screen.findByText("让 Agent 接手 →")).toBeInTheDocument()
-    expect(screen.getByText("本会话产出")).toBeInTheDocument()
+    // 流式事件：assistant-text 段落 + tool-call 派生产出物
+    expect(await screen.findByText(/结合截止时间和阻塞关系/, {}, { timeout: 3000 })).toBeInTheDocument()
+    expect(await screen.findByText("本会话产出", {}, { timeout: 3000 })).toBeInTheDocument()
   })
 
   it("artifacts rail collapses and restores", async () => {

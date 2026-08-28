@@ -87,7 +87,7 @@ export interface AgentClient {
   listSessions(): Promise<SessionMeta[]>
   history(sessionId: string): Promise<AgentStreamEvent[]>
   subscribe(handler: (ev: AgentStreamEvent) => void): () => void
-  send(text: string): Promise<void>
+  send(text: string, answerQuestionId?: string): Promise<void>
   cancel(): Promise<void>
   disposeSession(): Promise<void>
   answerApproval(id: string, decision: "allow" | "deny"): Promise<void>
