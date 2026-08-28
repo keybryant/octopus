@@ -273,6 +273,35 @@ describe("TaskSessionManager", () => {
     expect(after.session.live).toBe(false)
   })
 
+  it("start fresh 路径 attachSession 失败：dispose 刚创建的 handle 并原样抛错", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const boom = new Error("attach failed")
+    h.taskStore.attachSession = vi.fn(async () => { throw boom })
+    await expect(h.manager.start("TASK-2800")).rejects.toThrow(boom)
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    expect(handle.dispose).toHaveBeenCalled()
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toBeUndefined()
+    expect(h.tasks.get("TASK-2800")?.status).toBe("todo")
+  })
+
+  it("start fresh 路径 todo→doing update 失败：dispose 刚创建的 handle 并原样抛错", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const boom = new Error("update failed")
+    const originalUpdate = h.taskStore.update
+    h.taskStore.update = vi.fn(async (id: string, patch: Partial<TaskRecord>) => {
+      if (patch.status === "doing") throw boom
+      return originalUpdate(id, patch)
+    })
+    await expect(h.manager.start("TASK-2800")).rejects.toThrow(boom)
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    expect(handle.dispose).toHaveBeenCalled()
+    expect(h.agents.create).toHaveBeenCalledWith(expect.objectContaining({ sessionId: expect.stringMatching(/^task-/) }))
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toMatch(/^task-/)
+    expect(h.tasks.get("TASK-2800")?.status).toBe("todo")
+  })
+
   it("createTaskSessionId 生成 task- 前缀 8 位 id", () => {
     const id = createTaskSessionId()
     expect(id).toMatch(/^task-[A-Z2-7]{8}$/)

@@ -160,9 +160,14 @@ export class TaskSessionManager {
       await handle.dispose().catch(() => {})
       return { sessionId, task: this.deps.taskStore.get(taskId) ?? task }
     }
-    if (fresh) await this.deps.taskStore.attachSession(taskId, sessionId)
-    if (task.status === "todo") {
-      await this.deps.taskStore.update(taskId, { status: "doing" })
+    try {
+      if (fresh) await this.deps.taskStore.attachSession(taskId, sessionId)
+      if (task.status === "todo") {
+        await this.deps.taskStore.update(taskId, { status: "doing" })
+      }
+    } catch (error) {
+      await handle.dispose().catch(() => {})
+      throw error
     }
     if (this.starting.get(taskId)?.token !== token) {
       await handle.dispose().catch(() => {})

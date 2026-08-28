@@ -54,7 +54,15 @@ describe("buildTaskSetup", () => {
   it("report_task_status 先写 summary 再推进状态", async () => {
     const h = makeHarness()
     const result = await exec(h.byName("report_task_status"), { status: "review", summary: " 已完成导出 " }) as TaskRecord
-    expect(h.taskStore.setAgentSummary).toHaveBeenCalledWith("TASK-2800", "已完成导出")
+    expect(h.taskStore.setAgentSummary).toHaveBeenCalledWith("TASK-2800", " 已完成导出 ")
+    expect(h.taskStore.update).toHaveBeenCalledWith("TASK-2800", { status: "review" })
+    expect(result.status).toBe("review")
+  })
+
+  it("report_task_status 全空白 summary 不写总结且状态仍推进", async () => {
+    const h = makeHarness()
+    const result = await exec(h.byName("report_task_status"), { status: "review", summary: "   " }) as TaskRecord
+    expect(h.taskStore.setAgentSummary).not.toHaveBeenCalled()
     expect(h.taskStore.update).toHaveBeenCalledWith("TASK-2800", { status: "review" })
     expect(result.status).toBe("review")
   })

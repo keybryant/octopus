@@ -77,8 +77,8 @@ export function buildTaskSetup(deps: SubToolsDeps, taskId: string): (agentCtx: A
         try {
           const task = taskStore.get(taskId)
           if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
-          if (args.summary !== undefined) {
-            await taskStore.setAgentSummary(taskId, args.summary.trim())
+          if (args.summary !== undefined && args.summary.trim()) {
+            await taskStore.setAgentSummary(taskId, args.summary)
           }
           return await taskStore.update(taskId, { status: args.status })
         } catch (error) {

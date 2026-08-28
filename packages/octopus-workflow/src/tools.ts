@@ -301,7 +301,7 @@ export function createMainTools(deps: MainToolsDeps) {
           type: "object", additionalProperties: false,
           properties: {
             sessionId: { type: "string", required: true },
-            task: taskObjectSchema,
+            task: { ...taskObjectSchema, required: true },
           },
         },
         render: (_args, value) => text(`task session started: ${value.sessionId}`),

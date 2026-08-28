@@ -14,6 +14,8 @@ Agent 编排服务插件：主 agent 会话（工作台聊天）通过 14 个工
 
 `ctx.get` 读取平台与三域 store 服务：`agents`（平台 AgentRegistry）、`tools`、`requirementStore`、`taskStore`、`projectStore`。store 服务由 `octopus-projects` / `octopus-requirements` / `octopus-tasks` 提供；缺失时工具仍注册，调用时抛错降级。
 
+> **降级行为说明**：当任一依赖域（requirements/tasks/projects）存储打开失败时，对应 store 服务不提供，octopus-workflow 插件整体不加载（主 agent 将看不到本插件的 14 个工具）。这与 spec「工具执行返回 session-unavailable」的字面差异已记录，正常态不可达。
+
 ## 配置
 
 ```ts
