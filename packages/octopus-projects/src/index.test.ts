@@ -11,6 +11,7 @@ function mockContext(openImpl: () => Promise<unknown>) {
     storageDomain: { open: vi.fn(openImpl) },
     workspaceRegistry: { create: vi.fn() },
     effect: vi.fn((factory: () => () => void) => { disposeAll = factory() }),
+    provide: vi.fn(),
   }
   return { ctx, registered, dispose, getDisposeAll: () => disposeAll }
 }
@@ -38,6 +39,10 @@ describe("apply", () => {
     const { ctx, registered } = mockContext(() => Promise.resolve(fakeDomain))
     await apply(ctx, { defaultWorkspaceRoot: "~/proj-root" })
     expect(ctx.storageDomain.open).toHaveBeenCalledTimes(1)
+    expect(ctx.provide).toHaveBeenCalledWith("projectStore", expect.any(Object))
+    const store = ctx.provide.mock.calls[0][1]
+    expect(typeof store.list).toBe("function")
+    expect(typeof store.get).toBe("function")
     expect(registered).toHaveLength(1)
     expect(registered[0].kind).toBe("prefix")
     expect(registered[0].path).toBe(BASE_PATH)

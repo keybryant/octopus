@@ -11,13 +11,16 @@ import {
   projectsDomainSpec,
   resolveDefaultWorkspaceRoot,
 } from "./domain.js"
+import { createProjectStore } from "./service.js"
 
 export { DEFAULT_CONFIG }
+export { createProjectStore, type ProjectStoreLike, type ProjectView } from "./service.js"
 
 declare module "@deepseek-ai/cordis" {
   interface Context {
     storageDomain: import("@deepseek-ai/dsh-storage-domain").DomainFacility
     workspaceRegistry: import("@deepseek-ai/dsh-workspace").WorkspaceRegistry
+    projectStore: import("./service.js").ProjectStoreLike
   }
 }
 
@@ -65,6 +68,7 @@ export async function apply(ctx: Context, config: Partial<typeof DEFAULT_CONFIG>
     return
   }
 
+  ctx.provide("projectStore", createProjectStore(deps.projects))
   const handler = createProjectsHandler(deps)
   ctx.effect(() => {
     const disposeRoute = webServer.register({
