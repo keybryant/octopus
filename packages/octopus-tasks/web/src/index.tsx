@@ -71,7 +71,6 @@ export default function TasksModule() {
         requirementId: p.requirementId,
         title: p.title,
         description: p.description,
-        priority: p.priority,
       })
       const rows = drafts.length > 0 ? drafts : [{ title: "" }]
       setDraftRows(rows.map((d) => ({ ...d, key: rowKeyRef.current++, checked: true })))
@@ -106,9 +105,7 @@ export default function TasksModule() {
         .filter((r) => r.checked && r.title.trim().length > 0)
         .map((r) => ({
           title: r.title.trim(),
-          priority: r.priority ?? "P1",
-          assignee: r.assignee?.trim() || undefined,
-          description: r.description,
+          description: r.description ?? "",
         }))
       const created = await createTaskBatch({
         requirementId: payload.requirementId,

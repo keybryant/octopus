@@ -1,10 +1,6 @@
 export type TaskStatus = "todo" | "doing" | "review" | "done"
 
-export type Priority = "P0" | "P1" | "P2"
-
 export const TASK_STATUSES: readonly TaskStatus[] = ["todo", "doing", "review", "done"]
-
-export const PRIORITIES: readonly Priority[] = ["P0", "P1", "P2"]
 
 export interface TaskRecord {
   id: string
@@ -12,9 +8,7 @@ export interface TaskRecord {
   description: string
   requirementId: string
   projectId: string
-  priority: Priority
   status: TaskStatus
-  assignee: string | null
   createdAt: string
   updatedAt: string
 }
@@ -23,8 +17,6 @@ export interface TaskRecord {
 export interface TaskDraft {
   title: string
   description?: string
-  priority?: Priority
-  assignee?: string
 }
 
 /** 单条创建入参（requirementId/projectId 必填）*/
@@ -34,7 +26,7 @@ export interface TaskInput extends TaskDraft {
 }
 
 export type TaskPatch = Partial<
-  Pick<TaskRecord, "title" | "description" | "priority" | "status" | "assignee">
+  Pick<TaskRecord, "title" | "description" | "status">
 >
 
 export type TasksErrorCode = "not-found" | "invalid-input" | "invalid-transition"

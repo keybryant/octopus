@@ -4,9 +4,9 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import TasksModule from "./index"
 
 const TASKS = [
-  { id: "TASK-2800", title: "导出 CSV", description: "", requirementId: "REQ-100", projectId: "p-alpha", priority: "P0", status: "todo", assignee: "LW", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
-  { id: "TASK-2801", title: "联调测试", description: "", requirementId: "REQ-100", projectId: "p-alpha", priority: "P2", status: "doing", assignee: null, createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
-  { id: "TASK-2802", title: "验收上线", description: "", requirementId: "REQ-100", projectId: "p-alpha", priority: "P2", status: "done", assignee: null, createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+  { id: "TASK-2800", title: "导出 CSV", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "todo", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+  { id: "TASK-2801", title: "联调测试", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "doing", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+  { id: "TASK-2802", title: "验收上线", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "done", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
 ]
 
 function mockResponse(status: number, body: unknown) {
@@ -28,7 +28,7 @@ afterEach(() => {
 })
 
 describe("TasksModule", () => {
-  it("渲染四列看板与任务卡（id/优先级/负责人）", async () => {
+  it("渲染四列看板与任务卡（id/标题）", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, { ok: true, data: TASKS })))
     render(<TasksModule />)
     expect(await screen.findByText("导出 CSV")).toBeInTheDocument()
@@ -36,7 +36,7 @@ describe("TasksModule", () => {
       expect(screen.getByRole("group", { name: label })).toBeInTheDocument()
     }
     expect(screen.getByText("TASK-2800")).toBeInTheDocument()
-    expect(screen.getByText("LW")).toBeInTheDocument()
+    expect(screen.getByText("联调测试")).toBeInTheDocument()
     expect(screen.getByText("共 3 个")).toBeInTheDocument()
   })
 
@@ -162,7 +162,6 @@ describe("TasksModule 拆解流程", () => {
     ;(window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload = {
       requirementId: "REQ-100",
       title: "OAuth 2.0 重构",
-      priority: "P0",
       description: "无感登录",
     }
     const fetchMock = vi
@@ -172,15 +171,17 @@ describe("TasksModule 拆解流程", () => {
         ok: true,
         data: {
           drafts: [
-            { title: "排期与拆解 OAuth 2.0 重构", priority: "P0" },
-            { title: "实现OAuth 2.0 重构 · 核心逻辑", priority: "P0" },
+            { title: "实现OAuth 2.0 重构 · 核心逻辑", description: "无感登录" },
+            { title: "OAuth 2.0 重构 · 联调与测试" },
+            { title: "OAuth 2.0 重构 · 验收与上线准备" },
           ],
         },
       }))
       .mockResolvedValueOnce(mockResponse(201, {
         ok: true,
         data: [
-          { id: "TASK-2800", title: "排期与拆解 OAuth 2.0 重构", description: "", requirementId: "REQ-100", projectId: "p-alpha", priority: "P0", status: "todo", assignee: null, createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+          { id: "TASK-2800", title: "实现OAuth 2.0 重构 · 核心逻辑", description: "无感登录", requirementId: "REQ-100", projectId: "p-alpha", status: "todo", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
+          { id: "TASK-2801", title: "OAuth 2.0 重构 · 验收与上线准备", description: "", requirementId: "REQ-100", projectId: "p-alpha", status: "todo", createdAt: "2026-08-28T08:00:00.000Z", updatedAt: "2026-08-28T08:00:00.000Z" },
         ],
       }))
     vi.stubGlobal("fetch", fetchMock)
@@ -188,7 +189,7 @@ describe("TasksModule 拆解流程", () => {
     render(<TasksModule />)
     expect(await screen.findByText("拆解任务")).toBeInTheDocument()
 
-    await waitFor(() => expect(screen.getByLabelText("任务标题 0")).toHaveValue("排期与拆解 OAuth 2.0 重构"))
+    await waitFor(() => expect(screen.getByLabelText("任务标题 0")).toHaveValue("实现OAuth 2.0 重构 · 核心逻辑"))
     // 取消勾选第二行
     const checkboxes = screen.getAllByRole("checkbox")
     await userEvent.click(checkboxes[1])
@@ -203,12 +204,15 @@ describe("TasksModule 拆解流程", () => {
           body: JSON.stringify({
             requirementId: "REQ-100",
             projectId: "p-alpha",
-            tasks: [{ title: "排期与拆解 OAuth 2.0 重构", priority: "P0" }],
+            tasks: [
+              { title: "实现OAuth 2.0 重构 · 核心逻辑", description: "无感登录" },
+              { title: "OAuth 2.0 重构 · 验收与上线准备", description: "" },
+            ],
           }),
         }),
       ),
     )
-    await waitFor(() => expect(screen.getByText("排期与拆解 OAuth 2.0 重构")).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText("实现OAuth 2.0 重构 · 核心逻辑")).toBeInTheDocument())
     // 载荷已消费
     expect((window as unknown as { __octopusDecomposePayload?: unknown }).__octopusDecomposePayload).toBeUndefined()
   })

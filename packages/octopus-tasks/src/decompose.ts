@@ -1,9 +1,8 @@
-import type { Priority, TaskDraft } from "./types.js"
+import type { TaskDraft } from "./types.js"
 
 export interface DecomposeContext {
   title: string
   description?: string
-  priority?: Priority
 }
 
 /**
@@ -12,25 +11,17 @@ export interface DecomposeContext {
  */
 export function generateTaskDrafts(input: DecomposeContext): TaskDraft[] {
   const title = input.title.trim()
-  const priority = input.priority ?? "P1"
   const description = input.description?.trim() ?? ""
-  const drafts: TaskDraft[] = [
+  return [
     {
       title: `实现${title} · 核心逻辑`,
-      priority,
       description,
     },
     {
       title: `${title} · 联调与测试`,
-      priority,
     },
     {
       title: `${title} · 验收与上线准备`,
-      priority: "P2",
     },
   ]
-  if (priority === "P0") {
-    drafts.unshift({ title: `排期与拆解 ${title}`, priority: "P0" })
-  }
-  return drafts
 }

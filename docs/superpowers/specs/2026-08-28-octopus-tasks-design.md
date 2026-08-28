@@ -8,7 +8,7 @@
 
 octopus 为"壳 + 功能插件"架构。需求域已由 `octopus-requirements` 插件承接（domain + REST API + 前端模块）；任务域在壳内仍是纯 mock（`KanbanDrawer` + `KANBAN_TASKS` 硬编码，`TASK-28xx`，State 存 `useState`，刷新即失）。
 
-本插件将任务域抽为独立功能插件 `octopus-tasks`：任务**只从需求拆解**（`requirementId` 必填），拆解方式为 **AI 生成草稿 + 人工确认**（AI 拆解先行 mock，服务端接口可替换）；任务看板（4 列）替换壳内 mock 看板；**AI 执行任务（agent）不在本次范围**，字段与代码默认值上预留接缝。
+本插件将任务域抽为独立功能插件 `octopus-tasks`：任务**只从需求拆解**（`requirementId` 必填），拆解方式为 **AI 生成草稿 + 人工确认**（AI 拆解先行 mock，服务端接口可替换）；任务看板（4 列）替换壳内 mock 看板；**AI 执行任务（agent）不在本次范围**。
 
 ## 目标
 
@@ -19,7 +19,7 @@ octopus 为"壳 + 功能插件"架构。需求域已由 `octopus-requirements` �
 
 ## 非目标（v1）
 
-- **不做 agent 执行**：任务无执行引擎、无 agent 会话；`assignee` 为自由文本预留，后继 agent 接入时再扩展（参见后续待办）
+- **不做 agent 执行**：任务无执行引擎、无 agent 会话（后继 agent 接入时再扩展，参见后续待办）
 - 不做 kanban 列内排序（拖拽仅跨列迁态；列内按 id 升序）
 - 不做多用户/权限、迭代/排期、任务与需求的级联状态联动
 - 不做任务审批流/评论
@@ -28,7 +28,6 @@ octopus 为"壳 + 功能插件"架构。需求域已由 `octopus-requirements` �
 
 ```ts
 type TaskStatus = "todo" | "doing" | "review" | "done"
-type Priority = "P0" | "P1" | "P2"          // 与 requirements 复用同一组取值
 
 interface TaskRecord {
   id: string            // 服务端生成 "TASK-2800"
@@ -36,9 +35,7 @@ interface TaskRecord {
   description: string   // 可为空串
   requirementId: string // 必填：任务只从需求拆解
   projectId: string     // 必填：继承自需求，强制项目隔离
-  priority: Priority
   status: TaskStatus
-  assignee: string | null // 自由文本；agent 接入后扩展为 agent/用户引用
   createdAt: string     // ISO
   updatedAt: string
 }
@@ -68,12 +65,12 @@ const TASKS_DOMAIN = defineDomain({
 
 | Method | Path | 说明 |
 |---|---|---|
-| GET | /api/octopus-tasks/tasks | 列表，`?projectId=` 必填；可选 `&status=` `&requirementId=` `&priority=` |
+| GET | /api/octopus-tasks/tasks | 列表，`?projectId=` 必填；可选 `&status=` `&requirementId=` |
 | POST | /api/octopus-tasks/tasks | 单条创建（手补任务留口，`requirementId`/`projectId` 必填） |
-| POST | /api/octopus-tasks/tasks/batch | 批量创建，body `{ requirementId, projectId, tasks: [{title, description?, priority?, assignee?}] }`；全量校验通过才落库，全有或全无 |
-| POST | /api/octopus-tasks/tasks/decompose | AI 拆解草稿：body `{ requirementId, title, description?, priority? }`（title 客户端传入需求标题、服务端必填校验；description/priority 可选），返回 `{ drafts: [{title, description, priority, assignee?}] }`；当前为服务端 mock 生成器，后续替换为真实 LLM 调用，**契约不变** |
+| POST | /api/octopus-tasks/tasks/batch | 批量创建，body `{ requirementId, projectId, tasks: [{title, description?}] }`；全量校验通过才落库，全有或全无 |
+| POST | /api/octopus-tasks/tasks/decompose | AI 拆解草稿：body `{ requirementId, title, description? }`（title 客户端传入需求标题、服务端必填校验；description 可选），返回 `{ drafts: [{title, description}] }`；当前为服务端 mock 生成器（固定 3 条：实现/联调测试/验收上线，首条携带需求描述），后续替换为真实 LLM 调用，**契约不变** |
 | GET | /api/octopus-tasks/tasks/:id | 单条 |
-| PATCH | /api/octopus-tasks/tasks/:id | 更新（title/description/priority/status/assignee；status 含状态机校验） |
+| PATCH | /api/octopus-tasks/tasks/:id | 更新（title/description/status；status 含状态机校验） |
 | DELETE | /api/octopus-tasks/tasks/:id | 删除（幂等） |
 
 要点（同 requirements 约定）：
@@ -87,8 +84,8 @@ const TASKS_DOMAIN = defineDomain({
 vite.config.ts 照抄 requirements（react + tailwind + `octopusVendor()` + inlineCss，library mode → web/dist/index.js）。
 
 - `web/src/types.ts` / `api.ts`：类型与 fetch 封装（`currentProjectId()` 读 `window.__octopusProjectId`，与 requirements 一致）
-- **TaskBoard.tsx**：4 列看板（待处理/进行中/评审中/已完成，列头同 mock 样式：dot + label + count）；卡片 = id + priority badge + title + assignee 头像；**拖拽用原生 HTML5 DnD**（dragstart/dragover/drop，跨列 PATCH status，乐观更新 + 失败回滚 + 提示）；卡片右下角同时提供状态下拉兜底（单向迁移 todo→doing→review→done，done 卡无按钮）；v1 不引入 dnd-kit 依赖，后续体验升级再换
-- **DecomposeDraftsModal.tsx**：拆解弹窗。挂载时若载荷存在自动请求 `decompose`（loading 态）→ 草稿行列表（title 可编辑、priority 下拉、assignee 输入、每行勾选，默认全选）→ "创建任务"按钮 → `tasks/batch` → 成功后刷新看板并关闭；草稿为空时展示手动行编辑（至少一行兜底）
+- **TaskBoard.tsx**：4 列看板（待处理/进行中/评审中/已完成，列头同 mock 样式：dot + label + count）；卡片 = id + title + 迁卡控件（拖拽 + 状态下拉兜底按钮），无优先级徽章、无负责人头像；**拖拽用原生 HTML5 DnD**（dragstart/dragover/drop，跨列 PATCH status，乐观更新 + 失败回滚 + 提示）；卡片右下角同时提供状态下拉兜底（单向迁移 todo→doing→review→done，done 卡无按钮）；v1 不引入 dnd-kit 依赖，后续体验升级再换
+- **DecomposeDraftsModal.tsx**：拆解弹窗。挂载时若载荷存在自动请求 `decompose`（loading 态）→ 草稿行列表（title 可编辑、每行勾选，默认全选）→ "创建任务"按钮 → `tasks/batch` → 成功后刷新看板并关闭；草稿为空时展示手动行编辑（至少一行兜底）
 - 模块入口 `index.tsx`（default export）：读取载荷 → 渲染看板；任务看板入口（无载荷）仅显示看板 + 空态提示"从需求列表行内『拆解任务』入口拆分新任务"（v1 任务模块不内建需求选择器，避免跨插件数据耦合）
 
 ### 跨插件桥接（拆解链路）

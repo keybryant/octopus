@@ -118,9 +118,7 @@ export class TaskStore {
       description: input.description?.trim() ?? "",
       requirementId: input.requirementId.trim(),
       projectId: input.projectId.trim(),
-      priority: input.priority ?? "P2",
       status: "todo",
-      assignee: input.assignee?.trim() || null,
       createdAt: now,
       updatedAt: now,
     }
@@ -143,7 +141,6 @@ export class TaskStore {
       }
       const next: TaskRecord = { ...current, ...patch, updatedAt: new Date().toISOString() }
       if (patch.title !== undefined) next.title = patch.title.trim()
-      if (patch.assignee !== undefined) next.assignee = patch.assignee?.trim() || null
       return next
     })
   }

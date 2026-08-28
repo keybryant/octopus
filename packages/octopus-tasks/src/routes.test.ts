@@ -54,16 +54,14 @@ async function createHarness() {
 }
 
 describe("parse*Input", () => {
-  it("parseCreateInput 归一化合法入参并拒绝非法枚举", () => {
-    expect(parseCreateInput({ title: "A", requirementId: "R", projectId: "p", priority: "P0", assignee: "ZS", status: "done" })).toEqual({
+  it("parseCreateInput 归一化合法入参（status 等未知字段忽略）", () => {
+    expect(parseCreateInput({ title: "A", requirementId: "R", projectId: "p", description: "d", status: "done" })).toEqual({
       title: "A",
       requirementId: "R",
       projectId: "p",
-      priority: "P0",
-      assignee: "ZS",
+      description: "d",
     })
     expect(parseCreateInput({ title: "B", requirementId: "R", projectId: "p" })).toEqual({ title: "B", requirementId: "R", projectId: "p" })
-    expect(() => parseCreateInput({ title: "A", requirementId: "R", projectId: "p", priority: "P9" })).toThrowError(/priority/)
     expect(() => parseCreateInput({ title: "A", projectId: "p" })).toThrowError(/requirementId is required/)
   })
 
@@ -71,21 +69,22 @@ describe("parse*Input", () => {
     const parsed = parseBatchInput({
       requirementId: "R",
       projectId: "p",
-      tasks: [{ title: "A", priority: "P1", extra: 1 }, { title: "B" }],
+      tasks: [{ title: "A", description: "d", extra: 1 }, { title: "B" }],
     })
-    expect(parsed.tasks).toEqual([{ title: "A", priority: "P1" }, { title: "B" }])
+    expect(parsed.tasks).toEqual([{ title: "A", description: "d" }, { title: "B" }])
     expect(() => parseBatchInput({ requirementId: "R", projectId: "p", tasks: "x" })).toThrowError(/tasks/)
     expect(() => parseBatchInput({ requirementId: "R", tasks: [{ title: "A" }] })).toThrowError(/projectId is required/)
   })
 
-  it("parseDecomposeInput 要求 requirementId 与 title", () => {
+  it("parseDecomposeInput 要求 requirementId 与 title，description 可选", () => {
     expect(parseDecomposeInput({ requirementId: "R", title: "T" })).toEqual({ requirementId: "R", title: "T" })
+    expect(parseDecomposeInput({ requirementId: "R", title: "T", description: "d" })).toEqual({ requirementId: "R", title: "T", description: "d" })
     expect(() => parseDecomposeInput({ requirementId: "R" })).toThrowError(/title is required/)
     expect(() => parseDecomposeInput({ title: "T" })).toThrowError(/requirementId is required/)
   })
 
   it("parsePatchInput 只接受声明字段并拒绝空更新", () => {
-    expect(parsePatchInput({ status: "doing", assignee: " ", extra: 1 })).toEqual({ status: "doing", assignee: null })
+    expect(parsePatchInput({ status: "doing", title: "A2", extra: 1 })).toEqual({ status: "doing", title: "A2" })
     expect(() => parsePatchInput({ status: "bogus" })).toThrowError(/status/)
     expect(() => parsePatchInput({})).toThrowError(/no fields to update/)
   })
@@ -116,8 +115,7 @@ describe("task REST API", () => {
       title: "导出 CSV",
       requirementId: "REQ-100",
       projectId: "p-alpha",
-      priority: "P0",
-      assignee: "LW",
+      description: "控制台导出",
       status: "done",
     })
     expect(res.calls[0].status).toBe(201)
@@ -126,9 +124,8 @@ describe("task REST API", () => {
       title: "导出 CSV",
       requirementId: "REQ-100",
       projectId: "p-alpha",
-      priority: "P0",
+      description: "控制台导出",
       status: "todo",
-      assignee: "LW",
     })
   })
 
@@ -149,7 +146,7 @@ describe("task REST API", () => {
     const okResp = await call("POST", TASKS_PATH + "/batch", {
       requirementId: "REQ-100",
       projectId: "p-alpha",
-      tasks: [{ title: "A" }, { title: "B", priority: "P0" }],
+      tasks: [{ title: "A" }, { title: "B", description: "b" }],
     })
     expect(okResp.res.calls[0].status).toBe(201)
     expect(okResp.body.data.map((t: any) => t.id)).toEqual(["TASK-2800", "TASK-2801"])
@@ -165,25 +162,23 @@ describe("task REST API", () => {
     expect(list.body.data).toHaveLength(2)
   })
 
-  it("decompose 返回草稿数组，契约未来不变", async () => {
+  it("decompose 返回固定 3 条草稿，契约未来不变", async () => {
     const { res, body } = await call("POST", TASKS_PATH + "/decompose", {
       requirementId: "REQ-100",
       title: "OAuth 2.0 重构",
-      priority: "P0",
       description: "无感登录",
     })
     expect(res.calls[0].status).toBe(200)
     expect(body.data.drafts).toEqual([
-      { title: "排期与拆解 OAuth 2.0 重构", priority: "P0" },
-      { title: "实现OAuth 2.0 重构 · 核心逻辑", priority: "P0", description: "无感登录" },
-      { title: "OAuth 2.0 重构 · 联调与测试", priority: "P0" },
-      { title: "OAuth 2.0 重构 · 验收与上线准备", priority: "P2" },
+      { title: "实现OAuth 2.0 重构 · 核心逻辑", description: "无感登录" },
+      { title: "OAuth 2.0 重构 · 联调与测试" },
+      { title: "OAuth 2.0 重构 · 验收与上线准备" },
     ])
   })
 
-  it("GET 列表：projectId 必填，支持 status/requirementId/priority 过滤", async () => {
-    await call("POST", TASKS_PATH, { title: "A", requirementId: "REQ-1", projectId: "p-alpha", priority: "P0" })
-    await call("POST", TASKS_PATH, { title: "B", requirementId: "REQ-2", projectId: "p-alpha", priority: "P1" })
+  it("GET 列表：projectId 必填，支持 status/requirementId 过滤", async () => {
+    await call("POST", TASKS_PATH, { title: "A", requirementId: "REQ-1", projectId: "p-alpha" })
+    await call("POST", TASKS_PATH, { title: "B", requirementId: "REQ-2", projectId: "p-alpha" })
     await call("POST", TASKS_PATH, { title: "C", requirementId: "REQ-1", projectId: "p-beta" })
 
     expect((await call("GET", TASKS_PATH)).res.calls[0].status).toBe(400)
@@ -195,8 +190,8 @@ describe("task REST API", () => {
     expect(byReq.body.data).toHaveLength(1)
     expect(byReq.body.data[0].id).toBe("TASK-2800")
 
-    const filtered = await call("GET", TASKS_PATH + "?projectId=p-alpha&status=todo&priority=P0")
-    expect(filtered.body.data.map((t: any) => t.id)).toEqual(["TASK-2800"])
+    const byStatus = await call("GET", TASKS_PATH + "?projectId=p-alpha&status=todo")
+    expect(byStatus.body.data.map((t: any) => t.id)).toEqual(["TASK-2800", "TASK-2801"])
 
     expect((await call("GET", TASKS_PATH + "?projectId=p-alpha&status=bogus")).res.calls[0].status).toBe(400)
   })

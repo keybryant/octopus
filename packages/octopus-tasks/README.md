@@ -14,7 +14,7 @@ octopus 工作台的任务管理插件：任务只从需求拆解（AI 草稿 + 
 
 | Method | Path | 说明 |
 |---|---|---|
-| GET | /tasks?projectId=&requirementId=&status=&priority= | 列表（projectId 必填） |
+| GET | /tasks?projectId=&requirementId=&status= | 列表（projectId 必填） |
 | POST | /tasks | 单条创建 |
 | POST | /tasks/batch | 批量创建（全有或全无，≤50） |
 | POST | /tasks/decompose | AI 拆解草稿（当前为 mock 生成器，契约固定） |

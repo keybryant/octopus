@@ -1,4 +1,4 @@
-import type { Priority, TaskDraft, TaskPatch, TaskRecord, TaskStatus } from "./types"
+import type { TaskDraft, TaskPatch, TaskRecord, TaskStatus } from "./types"
 
 const BASE = "/api/octopus-tasks/tasks"
 
@@ -7,7 +7,7 @@ interface ApiOk<T> {
   data: T
 }
 
-/** 当前项目编码：宿主 shell 通过 window.__octopusProjectId 注入；低优先级回退 URL query */
+/** 当前项目编码：宿主 shell 通过 window.__octopusProjectId 注入；回退 URL query */
 export function currentProjectId(): string {
   const injected = (window as { __octopusProjectId?: string }).__octopusProjectId
   if (injected) return injected
@@ -36,14 +36,12 @@ export async function listTasks(params?: {
   projectId?: string
   status?: TaskStatus
   requirementId?: string
-  priority?: Priority
 }): Promise<TaskRecord[]> {
   const qs = new URLSearchParams()
   const projectId = params?.projectId ?? currentProjectId()
   if (projectId) qs.set("projectId", projectId)
   if (params?.status) qs.set("status", params.status)
   if (params?.requirementId) qs.set("requirementId", params.requirementId)
-  if (params?.priority) qs.set("priority", params.priority)
   const query = qs.size > 0 ? `?${qs.toString()}` : ""
   return request<TaskRecord[]>(BASE + query)
 }
@@ -53,8 +51,6 @@ export async function createTask(input: {
   requirementId: string
   projectId?: string
   description?: string
-  priority?: Priority
-  assignee?: string
 }): Promise<TaskRecord> {
   return request<TaskRecord>(BASE, {
     method: "POST",
@@ -77,7 +73,6 @@ export async function decomposeTasks(input: {
   requirementId: string
   title: string
   description?: string
-  priority?: Priority
 }): Promise<TaskDraft[]> {
   const data = await request<{ drafts: TaskDraft[] }>(BASE + "/decompose", {
     method: "POST",

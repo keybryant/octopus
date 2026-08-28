@@ -37,8 +37,7 @@ describe("TaskStore", () => {
       title: "  导出报表支持 CSV 格式  ",
       requirementId: "REQ-124",
       projectId: "p-alpha",
-      priority: "P0",
-      assignee: "LW",
+      description: "按月导出",
     })
     const second = await store.create({
       title: "审计日志分页优化",
@@ -51,14 +50,10 @@ describe("TaskStore", () => {
     expect(first.title).toBe("导出报表支持 CSV 格式")
     expect(first.requirementId).toBe("REQ-124")
     expect(first.projectId).toBe("p-alpha")
-    expect(first.priority).toBe("P0")
-    expect(first.assignee).toBe("LW")
     expect(first.status).toBe("todo")
-    expect(first.description).toBe("")
+    expect(first.description).toBe("按月导出")
 
     expect(second.id).toBe("TASK-2801")
-    expect(second.priority).toBe("P2")
-    expect(second.assignee).toBeNull()
     expect(second.description).toBe("limit 后索引失效")
     expect(second.createdAt).toBe(second.updatedAt)
   })
@@ -96,9 +91,8 @@ describe("TaskStore", () => {
   it("update 支持字段修改与单向合法迁移，done 终态", async () => {
     const task = await store.create({ title: "A", requirementId: "REQ-1", projectId: "p-alpha" })
 
-    const renamed = await store.update(task.id, { title: "A2", assignee: "ZS" })
+    const renamed = await store.update(task.id, { title: "A2" })
     expect(renamed.title).toBe("A2")
-    expect(renamed.assignee).toBe("ZS")
 
     expect((await store.update(task.id, { status: "doing" })).status).toBe("doing")
     expect((await store.update(task.id, { status: "review" })).status).toBe("review")
@@ -151,15 +145,15 @@ describe("TaskStore", () => {
       requirementId: "REQ-100",
       projectId: "p-alpha",
       tasks: [
-        { title: "实现A", priority: "P0" },
-        { title: "B 联调", assignee: "ZS" },
+        { title: "实现A", description: "核心逻辑" },
+        { title: "B 联调" },
         { title: "  C 验收  " },
       ],
     })
     expect(created.map((t) => t.id)).toEqual(["TASK-2800", "TASK-2801", "TASK-2802"])
     expect(created.every((t) => t.status === "todo" && t.requirementId === "REQ-100")).toBe(true)
     expect(created[2].title).toBe("C 验收")
-    expect(created[1].assignee).toBe("ZS")
+    expect(created[0].description).toBe("核心逻辑")
   })
 
   it("createBatch 校验失败零写入、序号不消耗", async () => {

@@ -2,10 +2,8 @@ import type { HttpRequest, HttpResponse } from "octopus"
 import { generateTaskDrafts } from "./decompose.js"
 import { TaskStore } from "./store.js"
 import {
-  PRIORITIES,
   TASK_STATUSES,
   TasksError,
-  type Priority,
   type TaskDraft,
   type TaskInput,
   type TaskPatch,
@@ -92,10 +90,6 @@ function isStatus(value: unknown): value is TaskStatus {
   return typeof value === "string" && (TASK_STATUSES as readonly string[]).includes(value)
 }
 
-function isPriority(value: unknown): value is Priority {
-  return typeof value === "string" && (PRIORITIES as readonly string[]).includes(value)
-}
-
 /** 校验并归一化 body 为对象（多余字段忽略） */
 function requireObject(body: unknown): Record<string, unknown> {
   if (typeof body !== "object" || body === null || Array.isArray(body)) {
@@ -111,7 +105,7 @@ function requireString(raw: Record<string, unknown>, key: string, label: string)
   return raw[key] as string
 }
 
-/** batch 任务草稿：仅 title/description/priority/assignee，多余字段忽略 */
+/** batch 任务草稿：仅 title/description，多余字段忽略 */
 function parseDraft(raw: Record<string, unknown>, required: boolean): TaskDraft {
   const hasTitle = typeof raw.title === "string" && (raw.title as string).trim().length > 0
   if (!hasTitle) {
@@ -122,16 +116,6 @@ function parseDraft(raw: Record<string, unknown>, required: boolean): TaskDraft 
   if (raw.description !== undefined) {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     draft.description = raw.description
-  }
-  if (raw.priority !== undefined) {
-    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
-    draft.priority = raw.priority
-  }
-  if (raw.assignee !== undefined) {
-    if (raw.assignee !== null && typeof raw.assignee !== "string") {
-      throw new ApiError(400, "invalid-input", "assignee must be a string or null")
-    }
-    draft.assignee = (raw.assignee as string | null) ?? ""
   }
   return draft
 }
@@ -146,16 +130,6 @@ export function parseCreateInput(body: unknown): TaskInput {
   if (raw.description !== undefined) {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     input.description = raw.description
-  }
-  if (raw.priority !== undefined) {
-    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
-    input.priority = raw.priority
-  }
-  if (raw.assignee !== undefined) {
-    if (raw.assignee !== null && typeof raw.assignee !== "string") {
-      throw new ApiError(400, "invalid-input", "assignee must be a string or null")
-    }
-    input.assignee = (raw.assignee as string | null) ?? undefined
   }
   return input
 }
@@ -182,12 +156,11 @@ export function parseDecomposeInput(body: unknown): {
   requirementId: string
   title: string
   description?: string
-  priority?: Priority
 } {
   const raw = requireObject(body)
   const requirementId = requireString(raw, "requirementId", "requirementId")
   const title = requireString(raw, "title", "title")
-  const out: { requirementId: string; title: string; description?: string; priority?: Priority } = {
+  const out: { requirementId: string; title: string; description?: string } = {
     requirementId,
     title,
   }
@@ -195,14 +168,10 @@ export function parseDecomposeInput(body: unknown): {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     out.description = raw.description
   }
-  if (raw.priority !== undefined) {
-    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
-    out.priority = raw.priority
-  }
   return out
 }
 
-/** 校验并归一化更新入参（assignee 为空白字符串视为清空为 null） */
+/** 校验并归一化更新入参（title/description/status；status 含状态机校验） */
 export function parsePatchInput(body: unknown): TaskPatch {
   const raw = requireObject(body)
   const patch: TaskPatch = {}
@@ -216,19 +185,9 @@ export function parsePatchInput(body: unknown): TaskPatch {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     patch.description = raw.description
   }
-  if (raw.priority !== undefined) {
-    if (!isPriority(raw.priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
-    patch.priority = raw.priority
-  }
   if (raw.status !== undefined) {
     if (!isStatus(raw.status)) throw new ApiError(400, "invalid-input", `status must be one of ${TASK_STATUSES.join(", ")}`)
     patch.status = raw.status
-  }
-  if (raw.assignee !== undefined) {
-    if (raw.assignee !== null && typeof raw.assignee !== "string") {
-      throw new ApiError(400, "invalid-input", "assignee must be a string or null")
-    }
-    patch.assignee = typeof raw.assignee === "string" ? raw.assignee.trim() || null : null
   }
   if (Object.keys(patch).length === 0) {
     throw new ApiError(400, "invalid-input", "no fields to update")
@@ -236,19 +195,18 @@ export function parsePatchInput(body: unknown): TaskPatch {
   return patch
 }
 
-/** 列表查询：projectId 必填，status/requirementId/priority 可选过滤 */
+/** 列表查询：projectId 必填，status/requirementId 可选过滤 */
 function listQuery(req: HttpRequest): {
   projectId: string
   requirementId?: string
   status?: TaskStatus
-  priority?: Priority
 } {
   const url = new URL(req.url ?? "/", "http://localhost")
   const projectId = url.searchParams.get("projectId")
   if (projectId === null || !projectId.trim()) {
     throw new ApiError(400, "invalid-input", "projectId is required")
   }
-  const query: { projectId: string; requirementId?: string; status?: TaskStatus; priority?: Priority } = {
+  const query: { projectId: string; requirementId?: string; status?: TaskStatus } = {
     projectId,
   }
   const requirementId = url.searchParams.get("requirementId")
@@ -257,11 +215,6 @@ function listQuery(req: HttpRequest): {
   if (status !== null) {
     if (!isStatus(status)) throw new ApiError(400, "invalid-input", `status must be one of ${TASK_STATUSES.join(", ")}`)
     query.status = status
-  }
-  const priority = url.searchParams.get("priority")
-  if (priority !== null) {
-    if (!isPriority(priority)) throw new ApiError(400, "invalid-input", `priority must be one of ${PRIORITIES.join(", ")}`)
-    query.priority = priority
   }
   return query
 }
@@ -312,15 +265,14 @@ async function dispatch(store: TaskStore, req: HttpRequest, res: HttpResponse): 
 
   if (pathname === TASKS_PATH) {
     if (method === "GET") {
-      const { projectId, requirementId, status, priority } = listQuery(req)
+      const { projectId, requirementId, status } = listQuery(req)
       ok(
         res,
         store.list(
           (t) =>
             t.projectId === projectId &&
             (requirementId === undefined || t.requirementId === requirementId) &&
-            (status === undefined || t.status === status) &&
-            (priority === undefined || t.priority === priority),
+            (status === undefined || t.status === status),
         ),
       )
       return

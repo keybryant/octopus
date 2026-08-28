@@ -1,6 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from "react"
 import {
-  Badge,
   ChevronDown,
   DropdownMenu,
   DropdownMenuContent,
@@ -10,12 +9,6 @@ import {
 } from "octopus-ui"
 import { TASK_COLUMNS, type ColumnSpec } from "../status"
 import type { TaskRecord, TaskStatus } from "../types"
-
-const priorityTone: Record<TaskRecord["priority"], "warn" | "info" | "neutral"> = {
-  P0: "warn",
-  P1: "info",
-  P2: "neutral",
-}
 
 /** 状态单向迁移表：todo → doing → review → done；done 为终态无出口 */
 const NEXT_BY_STATUS: Record<Exclude<TaskStatus, "done">, TaskStatus[]> = {
@@ -87,18 +80,12 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
           >
             <div className="mb-1 flex items-center gap-2">
               <span className="font-mono text-[10.5px] text-text-faint">{t.id}</span>
-              <Badge tone={priorityTone[t.priority]}>{t.priority}</Badge>
               {busyIds.has(t.id) && <Spinner className="ml-auto h-3 w-3" />}
             </div>
             <div className={`text-[13px] font-medium leading-snug ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>
               {t.title}
             </div>
             <div className="mt-2 flex items-center justify-end gap-2">
-              {t.assignee && (
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-hover text-[9px] text-muted-foreground">
-                  {t.assignee.slice(0, 2)}
-                </span>
-              )}
               {t.status !== "done" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

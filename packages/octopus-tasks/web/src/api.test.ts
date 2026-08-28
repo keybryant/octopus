@@ -49,12 +49,12 @@ describe("web api", () => {
   it("createTaskBatch POST /batch 序列化 body 并注入 projectId", async () => {
     ;(window as unknown as { __octopusProjectId?: string }).__octopusProjectId = "p-alpha"
     vi.stubGlobal("fetch", mockFetchOnce(201, { ok: true, data: [{ id: "TASK-2800" }] }))
-    await createTaskBatch({ requirementId: "REQ-100", tasks: [{ title: "A" }] })
+    await createTaskBatch({ requirementId: "REQ-100", tasks: [{ title: "A", description: "" }] })
     expect(fetch).toHaveBeenCalledWith(
       "/api/octopus-tasks/tasks/batch",
       expect.objectContaining({
         method: "POST",
-        body: JSON.stringify({ requirementId: "REQ-100", projectId: "p-alpha", tasks: [{ title: "A" }] }),
+        body: JSON.stringify({ requirementId: "REQ-100", projectId: "p-alpha", tasks: [{ title: "A", description: "" }] }),
       }),
     )
   })
@@ -64,7 +64,7 @@ describe("web api", () => {
       ok: true,
       data: { drafts: [{ title: "实现A" }, { title: "A 联调" }] },
     }))
-    const drafts = await decomposeTasks({ requirementId: "REQ-100", title: "A" })
+    const drafts = await decomposeTasks({ requirementId: "REQ-100", title: "A", description: "d" })
     expect(drafts).toEqual([{ title: "实现A" }, { title: "A 联调" }])
     expect(fetch).toHaveBeenCalledWith(
       "/api/octopus-tasks/tasks/decompose",

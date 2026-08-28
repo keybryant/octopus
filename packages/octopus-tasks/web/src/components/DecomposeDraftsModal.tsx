@@ -22,8 +22,6 @@ export interface DecomposeDraftsModalProps {
   onSubmit: () => void
 }
 
-const PRIORITY_OPTIONS = ["P0", "P1", "P2"] as const
-
 /** AI 拆解草稿确认弹窗：勾选/编辑草稿 → 批量创建（全有或全无） */
 export function DecomposeDraftsModal({
   open,
@@ -74,29 +72,7 @@ export function DecomposeDraftsModal({
                         disabled={!row.checked}
                       />
                     </span>
-                    <select
-                      value={row.priority ?? "P1"}
-                      aria-label={`优先级 ${row.key}`}
-                      disabled={!row.checked}
-                      onChange={(e) => onRowChange(row.key, { priority: e.target.value as TaskDraft["priority"] })}
-                      className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs"
-                    >
-                      {PRIORITY_OPTIONS.map((p) => (
-                        <option key={p} value={p}>{p}</option>
-                      ))}
-                    </select>
                   </label>
-                  <div className="mt-2 flex items-center gap-2.5">
-                    <span className="w-5 shrink-0" />
-                    <Input
-                      value={row.assignee ?? ""}
-                      aria-label={`负责人 ${row.key}`}
-                      onChange={(e) => onRowChange(row.key, { assignee: e.target.value })}
-                      disabled={!row.checked}
-                      placeholder="负责人（可选）"
-                      className="w-32"
-                    />
-                  </div>
                 </div>
               ))}
             </>
