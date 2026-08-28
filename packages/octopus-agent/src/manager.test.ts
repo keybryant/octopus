@@ -16,6 +16,7 @@ function fakeAgent(id: string, events: { status: "idle" | "running" }): TestAgen
     },
     followup: vi.fn(),
     cancel: vi.fn(),
+    options: { provider: "deepseek-official", model: "deepseek-v4-flash", maxTokens: 8192 },
   }
   return Object.assign(agent, {
     emit(event: string, ...args: unknown[]): unknown {
@@ -92,16 +93,16 @@ describe("AgentManager", () => {
     expect(callOptions.meta?.agentPreset).toBe("standard")
   })
 
-  it("sends a followup message through the live agent", async () => {
+  it("sends a followup message with a stable message id", async () => {
     const { manager, agents } = makeManager()
     const meta = await manager.create({})
     await manager.send(meta.id, "你好")
     const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
-    expect(handle.agent.followup).toHaveBeenCalledWith({
-      role: "user",
-      content: [{ type: "text", text: "你好" }],
-      source: { kind: "user" },
-    })
+    const sent = (handle.agent.followup as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as { id?: unknown; role: string; content: { type: string; text: string }[]; source: { kind: string } }
+    expect(sent.role).toBe("user")
+    expect(typeof sent.id).toBe("string")
+    expect(sent.content[0]).toEqual({ type: "text", text: "你好" })
+    expect(sent.source).toEqual({ kind: "user" })
     await expect(manager.send("oct-UNKNOWN", "x")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" })
   })
 
@@ -130,6 +131,25 @@ describe("AgentManager", () => {
     expect(evs[1]).toMatchObject({ idx: 1, type: "assistant-text", text: "yo" })
     expect(agents.resume).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: "oct-AAAAAAA1" }))
     expect(manager.getStatus("oct-AAAAAAA1")).toMatchObject({ live: true, status: "idle" })
+  })
+
+  it("getContext resumes a persisted session and yields its prompt", async () => {
+    const { manager, agents } = makeManager({
+      persistLoad: async () => ({ meta: { cwd: "/x", createdAt: 1 }, events: [] }),
+      deps: {
+        systemPrompt: {
+          assemble: vi.fn(async () => ({ prompt: "assembled prompt", context: "runtime snapshot" })),
+        },
+      },
+    })
+    const ctx = await manager.getContext("oct-AAAAAAA1")
+    expect(ctx.live).toBe(true)
+    expect(ctx.provider).toBe("deepseek-official")
+    expect(ctx.model).toBe("deepseek-v4-flash")
+    expect(ctx.maxTokens).toBe(8192)
+    expect(ctx.prompt).toBe("assembled prompt")
+    expect(ctx.context).toBe("runtime snapshot")
+    expect(agents.resume).toHaveBeenCalledOnce()
   })
 
   it("cancels the live agent with a user-kind cause", async () => {

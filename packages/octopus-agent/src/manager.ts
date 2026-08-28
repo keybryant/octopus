@@ -1,4 +1,5 @@
 import { EventIndex } from "./events-index.js"
+import { createUserMessage } from "@deepseek-ai/dsh-llm"
 import { createProjectState, deriveTitle, projectEvents, toStreamEvent, type SessionEventLike } from "./project.js"
 import type { SessionMeta } from "./types.js"
 
@@ -193,7 +194,8 @@ export class AgentManager {
     let history: HistoryLike
     try {
       history = await this.deps.persistence.load(id)
-    } catch {
+    } catch (error) {
+      console.warn(`[octopus-agent] persistence.load failed for ${id}:`, error)
       throw new ManagerError("SESSION_NOT_FOUND", `session ${id} not found`)
     }
     let handle: AgentHandleLike
@@ -317,7 +319,7 @@ export class AgentManager {
       }
     }
     const handle = this.requireLive(id)
-    handle.agent.followup({ role: "user", content: [{ type: "text", text }], source: { kind: "user" } })
+    handle.agent.followup(createUserMessage({ content: [{ type: "text", text }], source: { kind: "user" } }))
     if (entry) entry.lastActivityMs = this.currentNow()
   }
 
@@ -359,7 +361,17 @@ export class AgentManager {
   }
 
   async getContext(id: string): Promise<SessionContextInfo> {
-    const agent = this.requireLive(id).agent
+    let live = this.entries.get(id)?.handle
+    if (!live) {
+      try {
+        live = (await this.ensureLoaded(id)).handle
+      } catch (error) {
+        console.warn(`[octopus-agent] context resume failed for ${id}:`, error)
+        return { live: false }
+      }
+      if (!live) return { live: false }
+    }
+    const agent = live.agent
     const header = agent.session?.requestHeader?.()
     let prompt: string | undefined
     let context: string | undefined
