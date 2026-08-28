@@ -55,7 +55,18 @@ describe("useChat", () => {
       Promise.reject(new Error("boom")),
       Promise.resolve({ blocks: [{ kind: "paragraph", segs: [{ text: "ok" }] }] }),
     ]
-    const client: AgentClient = { reply: () => replies.shift()! }
+    const client: AgentClient = {
+      reply: () => replies.shift()!,
+      startSession: async () => "mock",
+      switchTo: async () => undefined,
+      listSessions: async () => [],
+      history: async () => [],
+      subscribe: () => () => undefined,
+      send: async () => undefined,
+      cancel: async () => undefined,
+      disposeSession: async () => undefined,
+      answerApproval: async () => undefined,
+    }
     const { result } = renderHook(() => useChat(client))
 
     act(() => result.current.send("first"))

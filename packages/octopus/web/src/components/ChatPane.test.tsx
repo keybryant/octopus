@@ -10,6 +10,15 @@ function instantClient(reply: Partial<AgentReply> = {}): AgentClient {
       blocks: [{ kind: "paragraph", segs: [{ text: "收到" }] }],
       ...reply,
     }),
+    startSession: async () => "mock",
+    switchTo: async () => undefined,
+    listSessions: async () => [],
+    history: async () => [],
+    subscribe: () => () => undefined,
+    send: async () => undefined,
+    cancel: async () => undefined,
+    disposeSession: async () => undefined,
+    answerApproval: async () => undefined,
   }
 }
 

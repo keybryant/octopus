@@ -12,10 +12,11 @@ import { ProjectStrip } from "./components/ProjectStrip"
 import { RequirementsDrawer } from "./components/RequirementsDrawer"
 import { TasksDrawer } from "./components/TasksDrawer"
 import { TopBar } from "./components/TopBar"
-import { createDefaultAgentClient } from "./lib/datasource"
+import { createDefaultAgentClient } from "./lib/agent-client"
 import { fetchMe, logout, redirectToLogin, type MeResponse } from "./lib/auth"
 import { deriveShortName } from "./lib/short-name"
 import type {
+  AgentClient,
   Artifact,
   ProjectSummary,
 } from "./lib/types"
@@ -109,7 +110,10 @@ export default function App() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
   const onArtifactsChange = useMemo(() => (a: Artifact[]) => setArtifacts(a), [])
 
-  const agentClient = useMemo(createDefaultAgentClient, [])
+  const [agentClient, setAgentClient] = useState<AgentClient | null>(null)
+  useEffect(() => {
+    void createDefaultAgentClient().then(setAgentClient)
+  }, [])
 
   const handleCreateProject = async (data: { name: string; description: string }) => {
     const created = await createProject({ name: data.name, description: data.description })

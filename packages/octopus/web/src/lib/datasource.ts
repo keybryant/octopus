@@ -1,11 +1,11 @@
-﻿import { createMockAgentClient } from "./agent-client"
-import type {
-  AgentClient,
+﻿import type {
   Artifact,
   ProjectSummary,
 } from "./types"
 
 export type { AgentClient } from "./types"
+
+export { createDefaultAgentClient } from "./agent-client"
 
 export const PROJECTS: ProjectSummary[] = [
   {
@@ -126,8 +126,3 @@ export const QUICK_PROMPTS: string[] = [
   "🔍 审查最近的 PR",
   "🗓️ 规划下个迭代",
 ]
-
-/** Phase 1 内置 mock 实现；真实后端接入时替换此处 */
-export function createDefaultAgentClient(): AgentClient {
-  return createMockAgentClient()
-}

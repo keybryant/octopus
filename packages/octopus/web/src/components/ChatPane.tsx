@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react"
 import { Button, Spinner } from "octopus-ui"
 import { History } from "octopus-ui"
-import { createDefaultAgentClient } from "../lib/datasource"
+import { createMockAgentClient } from "../lib/agent-client"
 import type { AgentClient } from "../lib/types"
 import { useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
@@ -10,7 +10,7 @@ import { QUICK_PROMPTS } from "../lib/datasource"
 
 export interface ChatPaneProps {
   /** 注入自定义 client 便于测试；生产默认 mock */
-  agentClient?: AgentClient
+  agentClient?: AgentClient | null
   onArtifactsChange?: (artifacts: ReturnType<typeof useChat>["artifacts"]) => void
 }
 
@@ -20,7 +20,7 @@ function sessionHeader(): string {
 }
 
 export function ChatPane({ agentClient, onArtifactsChange }: ChatPaneProps) {
-  const client = useMemo(() => agentClient ?? createDefaultAgentClient(), [agentClient])
+  const client = useMemo(() => agentClient ?? createMockAgentClient(), [agentClient])
   const { messages, status, send, artifacts } = useChat(client)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -66,7 +66,7 @@ export function ChatPane({ agentClient, onArtifactsChange }: ChatPaneProps) {
       {/* 输入区 */}
       <div className="shrink-0 pb-5">
         <div className="mx-auto max-w-[820px] px-6">
-          <Composer quickPrompts={QUICK_PROMPTS} disabled={status === "thinking"} contextLabel="Octopus Platform" onSend={send} />
+          <Composer quickPrompts={QUICK_PROMPTS} disabled={status === "thinking" || !agentClient} contextLabel="Octopus Platform" onSend={send} />
         </div>
       </div>
     </main>

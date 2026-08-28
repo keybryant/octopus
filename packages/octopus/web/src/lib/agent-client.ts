@@ -1,4 +1,11 @@
-import type { AgentClient, AgentReply, Artifact, MessageBlock } from "./types"
+import type {
+  AgentClient,
+  AgentReply,
+  AgentStreamEvent,
+  Artifact,
+  MessageBlock,
+  SessionMeta,
+} from "./types"
 
 const PRIORITY_SCRIPT: MessageBlock[] = [
   {
@@ -77,12 +84,257 @@ function pickScript(input: string): AgentReply {
   return { blocks: ACK_SCRIPT }
 }
 
+type WithoutIdx<T> = T extends AgentStreamEvent ? Omit<T, "idx"> : never
+type ScriptedEvent = WithoutIdx<AgentStreamEvent>
+
+const PRIORITY_EVENTS: ScriptedEvent[] = [
+  { type: "assistant-text", text: "结合截止时间和阻塞关系，今天建议按这个顺序处理：" },
+  { type: "tool-call", callId: "mock-t1", name: "todo_write", summary: "TASK-2850 · React 19 升级兼容性验证" },
+  { type: "tool-call", callId: "mock-t2", name: "todo_write", summary: "TASK-2841 · 认证模块 OAuth 2.0 重构" },
+  { type: "tool-call", callId: "mock-t3", name: "todo_write", summary: "REQ-121 · Agent 任务编排可视化评审" },
+]
+
+const DELEGATION_EVENTS: ScriptedEvent[] = [
+  {
+    type: "assistant-text",
+    text: "收到。我建了一条自动化流水线来接管 TASK-2850：升级依赖并修复 Breaking Changes（已定位 4 处）→ 运行全量回归测试（预计 25 分钟）→ 输出报告并发给你 & 王倩。",
+  },
+  { type: "tool-call", callId: "mock-t4", name: "str_replace_editor", summary: "TASK-2850 升级依赖 + 回归测试 + 报告通知" },
+]
+
+const ACK_EVENTS: ScriptedEvent[] = [
+  {
+    type: "assistant-text",
+    text: "收到。当前上下文是 Octopus Platform，可以让我列出待办、拆解需求或生成周报。",
+  },
+]
+
+function pickEvents(input: string): ScriptedEvent[] {
+  if (/待办|优先|事项/.test(input)) return PRIORITY_EVENTS
+  if (/接手|自动|跑/.test(input)) return DELEGATION_EVENTS
+  return ACK_EVENTS
+}
+
 export function createMockAgentClient(delayMs = 600): AgentClient {
+  let idx = 0
+  const handlers = new Set<(ev: AgentStreamEvent) => void>()
+
+  function emit(ev: ScriptedEvent): void {
+    const next: AgentStreamEvent = { ...ev, idx: ++idx }
+    for (const handler of [...handlers]) handler(next)
+  }
+
+  async function send(text: string): Promise<void> {
+    const timeline: ScriptedEvent[] = [
+      { type: "user-message", text },
+      { type: "turn", at: "start" },
+      ...pickEvents(text),
+      { type: "turn", at: "end" },
+      { type: "status", status: "idle" },
+    ]
+    for (const ev of timeline) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+      emit(ev)
+    }
+  }
+
   return {
-    reply(input) {
+    reply(input: string): Promise<AgentReply> {
       return new Promise((resolve) => {
         setTimeout(() => resolve(pickScript(input)), delayMs)
       })
     },
+    async startSession(): Promise<string> {
+      return "mock"
+    },
+    async switchTo(): Promise<void> {},
+    async listSessions(): Promise<SessionMeta[]> {
+      return [{ id: "mock", createdAt: new Date().toISOString(), cwd: null, title: "Mock 会话", live: true }]
+    },
+    async history(): Promise<AgentStreamEvent[]> {
+      return []
+    },
+    subscribe(handler: (ev: AgentStreamEvent) => void): () => void {
+      handlers.add(handler)
+      return () => handlers.delete(handler)
+    },
+    send,
+    async cancel(): Promise<void> {},
+    async disposeSession(): Promise<void> {},
+    async answerApproval(): Promise<void> {},
+  }
+}
+
+export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClient {
+  let sessionId: string | null = null
+  let lastIdx = -1
+  const handlers = new Set<(ev: AgentStreamEvent) => void>()
+  let es: EventSource | null = null
+  let pollTimer: ReturnType<typeof setInterval> | null = null
+
+  function deliver(ev: AgentStreamEvent): void {
+    if (ev.idx <= lastIdx) return
+    lastIdx = ev.idx
+    for (const handler of [...handlers]) handler(ev)
+  }
+
+  function closeStream(): void {
+    if (es) {
+      es.close()
+      es = null
+    }
+    if (pollTimer !== null) {
+      clearInterval(pollTimer)
+      pollTimer = null
+    }
+  }
+
+  async function poll(): Promise<void> {
+    if (!sessionId) return
+    try {
+      const res = await fetch(`${baseUrl}/sessions/${sessionId}/events?after=${lastIdx + 1}`)
+      const body = await res.text()
+      for (const frame of body.split("\n\n")) {
+        const dataLine = frame.split("\n").find((line) => line.startsWith("data: "))
+        if (!dataLine) continue
+        try {
+          deliver(JSON.parse(dataLine.slice(6)) as AgentStreamEvent)
+        } catch {
+          continue
+        }
+      }
+    } catch {
+      return
+    }
+  }
+
+  function openStream(): void {
+    if (!sessionId) return
+    closeStream()
+    const url = `${baseUrl}/sessions/${sessionId}/events?after=${lastIdx + 1}`
+    if (typeof EventSource !== "undefined") {
+      const source = new EventSource(url)
+      source.onmessage = (msg) => {
+        try {
+          deliver(JSON.parse(msg.data) as AgentStreamEvent)
+        } catch {
+          return
+        }
+      }
+      es = source
+    } else {
+      void poll()
+      pollTimer = setInterval(() => void poll(), 250)
+    }
+  }
+
+  async function post(path: string, payload?: Record<string, unknown>): Promise<void> {
+    const init: RequestInit = {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    }
+    if (payload !== undefined) init.body = JSON.stringify(payload)
+    await fetch(`${baseUrl}${path}`, init)
+  }
+
+  function subscribe(handler: (ev: AgentStreamEvent) => void): () => void {
+    handlers.add(handler)
+    openStream()
+    return () => {
+      handlers.delete(handler)
+      if (handlers.size === 0) closeStream()
+    }
+  }
+
+  async function send(text: string): Promise<void> {
+    if (!sessionId) throw new Error("send: no active session")
+    await post(`/sessions/${sessionId}/messages`, { text })
+  }
+
+  return {
+    reply(input: string): Promise<AgentReply> {
+      return new Promise((resolve, reject) => {
+        const blocks: MessageBlock[] = []
+        let finished = false
+        let unsub = (): void => undefined
+        unsub = subscribe((ev) => {
+          if (ev.type === "assistant-text") {
+            blocks.push({ kind: "paragraph", segs: [{ text: ev.text }] })
+          } else if (ev.type === "turn" && ev.at === "end") {
+            finished = true
+            unsub()
+            resolve({ blocks })
+          } else if (ev.type === "error") {
+            finished = true
+            unsub()
+            resolve({ blocks })
+          }
+        })
+        void send(input).catch((error) => {
+          if (!finished) {
+            finished = true
+            unsub()
+            reject(error)
+          }
+        })
+      })
+    },
+    async startSession(opts?: { cwd?: string }): Promise<string> {
+      const res = await fetch(`${baseUrl}/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cwd: opts?.cwd }),
+      })
+      const body = (await res.json()) as { session?: SessionMeta }
+      if (!body.session) throw new Error("startSession: no session in response")
+      sessionId = body.session.id
+      return body.session.id
+    },
+    async switchTo(nextSessionId: string): Promise<void> {
+      sessionId = nextSessionId
+      lastIdx = -1
+      closeStream()
+    },
+    async listSessions(): Promise<SessionMeta[]> {
+      const res = await fetch(`${baseUrl}/sessions`)
+      const body = (await res.json()) as { items?: SessionMeta[] }
+      return body.items ?? []
+    },
+    async history(targetSessionId: string): Promise<AgentStreamEvent[]> {
+      const res = await fetch(`${baseUrl}/sessions/${targetSessionId}/history`)
+      const body = (await res.json()) as { events?: AgentStreamEvent[] }
+      const events = body.events ?? []
+      if (events.length > 0) lastIdx = events[events.length - 1].idx
+      return events
+    },
+    subscribe,
+    send,
+    async cancel(): Promise<void> {
+      if (!sessionId) return
+      await post(`/sessions/${sessionId}/cancel`)
+    },
+    async disposeSession(): Promise<void> {
+      closeStream()
+      if (sessionId) await fetch(`${baseUrl}/sessions/${sessionId}`, { method: "DELETE" })
+      sessionId = null
+    },
+    async answerApproval(id: string, decision: "allow" | "deny"): Promise<void> {
+      if (!sessionId) throw new Error("answerApproval: no active session")
+      await post(`/sessions/${sessionId}/approvals/${id}`, { decision })
+    },
+  }
+}
+
+export async function createDefaultAgentClient(fetchImpl: typeof fetch = fetch): Promise<AgentClient> {
+  try {
+    const res = await fetchImpl("/api/octopus-agent/up", { signal: AbortSignal.timeout(1500) })
+    if (!res.ok) return createMockAgentClient()
+    const body: unknown = await res.json()
+    if (typeof body !== "object" || body === null || (body as { ok?: unknown }).ok !== true) {
+      return createMockAgentClient()
+    }
+    return createHttpAgentClient()
+  } catch {
+    return createMockAgentClient()
   }
 }

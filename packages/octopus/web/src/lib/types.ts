@@ -47,6 +47,7 @@ export type MessageBlock =
   | { kind: "actions"; actions: string[] }
   | { kind: "code"; filename: string; code: string }
   | { kind: "notice"; title: string; hint: string }
+  | { kind: "approval"; approvalId: string; toolName: string; reason?: string }
 
 export interface ChatMessage {
   id: string
@@ -81,5 +82,36 @@ export interface AgentReply {
  * 且行为不得依赖注册顺序。
  */
 export interface AgentClient {
+  startSession(opts?: { cwd?: string }): Promise<string>
+  switchTo(sessionId: string): Promise<void>
+  listSessions(): Promise<SessionMeta[]>
+  history(sessionId: string): Promise<AgentStreamEvent[]>
+  subscribe(handler: (ev: AgentStreamEvent) => void): () => void
+  send(text: string): Promise<void>
+  cancel(): Promise<void>
+  disposeSession(): Promise<void>
+  answerApproval(id: string, decision: "allow" | "deny"): Promise<void>
   reply(input: string): Promise<AgentReply>
 }
+
+export type AgentStreamEvent = { idx: number } & (
+  | { type: "status"; status: "idle" | "running" }
+  | { type: "user-message"; text: string }
+  | { type: "assistant-text"; text: string }
+  | { type: "tool-call"; callId: string; name: string; summary: string }
+  | { type: "tool-result"; callId: string; name: string; ok: boolean; preview: string }
+  | { type: "turn"; at: "start" | "end"; reason?: string }
+  | { type: "question"; id: string; question: string; options?: string[] }
+  | { type: "approval"; id: string; toolName: string; reason?: string }
+  | { type: "error"; message: string }
+)
+
+export interface SessionMeta {
+  id: string
+  createdAt: string
+  cwd: string | null
+  title: string | null
+  live: boolean
+}
+
+export type ApprovalBlock = { kind: "approval"; approvalId: string; toolName: string; reason?: string }
