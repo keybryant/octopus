@@ -8,10 +8,11 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Sheet,
   Spinner,
 } from "octopus-ui"
-import { History, Plus } from "octopus-ui"
-import type { AgentClient, Artifact, PresetInfo, SessionMeta } from "../lib/types"
+import { FileText, History, Plus } from "octopus-ui"
+import type { AgentClient, Artifact, PresetInfo, SessionContextInfo, SessionMeta } from "../lib/types"
 import { useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
 import { Composer } from "./Composer"
@@ -57,6 +58,8 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
   const [decidedIds, setDecidedIds] = useState<Set<string>>(new Set())
   const [presets, setPresets] = useState<PresetInfo[]>([])
   const [presetId, setPresetId] = useState<string | null>(() => readStoredPreset())
+  const [contextOpen, setContextOpen] = useState(false)
+  const [contextInfo, setContextInfo] = useState<SessionContextInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const refreshSessions = useCallback(async () => {
@@ -79,6 +82,16 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
   }, [agentClient, presets.length])
 
   const selectedPreset = presets.find((p) => p.id === presetId) ?? null
+
+  const handleOpenContext = async () => {
+    setContextOpen(true)
+    if (!agentClient || !currentSessionId) return
+    try {
+      setContextInfo(await agentClient.getSessionContext(currentSessionId))
+    } catch {
+      setContextInfo({ live: false })
+    }
+  }
 
   useEffect(() => {
     const el = scrollRef.current
@@ -123,6 +136,18 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
               {sessionHeader()}
             </div>
             <div className="flex items-center gap-1.5">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs"
+                title="查看上下文"
+                disabled={!agentClient}
+                data-testid="context-viewer"
+                onClick={() => void handleOpenContext()}
+              >
+                <FileText className="h-3.5 w-3.5" />
+                上下文
+              </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button
@@ -234,6 +259,40 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
           />
         </div>
       </div>
+
+      <Sheet open={contextOpen} onOpenChange={(open) => { setContextOpen(open); if (!open) setContextInfo(null) }} title="会话上下文" subtitle={currentSessionId ?? undefined}>
+        {contextInfo === null ? (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Spinner size="sm" />
+            正在读取会话上下文…
+          </div>
+        ) : contextInfo.live === false ? (
+          <div className="text-sm text-muted-foreground">会话未激活，无法读取上下文。</div>
+        ) : (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <span className="text-muted-foreground">
+                模型：<span className="font-mono text-foreground">{contextInfo.provider ?? "-"} / {contextInfo.model ?? "-"}</span>
+              </span>
+              <span className="text-muted-foreground">
+                最大输出：<span className="font-mono text-foreground">{contextInfo.maxTokens ?? "-"}</span>
+              </span>
+            </div>
+            <section data-testid="context-prompt">
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">系统提示词</h3>
+              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-background p-3 font-mono text-xs leading-relaxed text-muted-foreground">
+                {contextInfo.prompt ?? "（暂无）"}
+              </pre>
+            </section>
+            <section data-testid="context-runtime">
+              <h3 className="mb-1 text-xs font-medium text-muted-foreground">运行时上下文</h3>
+              <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-all rounded-lg border border-border bg-background p-3 font-mono text-xs leading-relaxed text-muted-foreground">
+                {contextInfo.context ?? "（暂无）"}
+              </pre>
+            </section>
+          </div>
+        )}
+      </Sheet>
     </main>
   )
 }

@@ -12,6 +12,7 @@ interface StubManager {
   list: Mock<() => Promise<SessionMeta[]>>
   getIndex: Mock<(id: string, opts?: { allowResume?: boolean }) => Promise<IndexLike>>
   getStatus: Mock<(id: string) => StatusLike>
+  getContext: Mock<(id: string) => Promise<{ live: boolean; provider?: string; model?: string; prompt?: string; context?: string }>>
   send: Mock<(id: string, text: string, answerQuestionId?: string) => Promise<void>>
   cancel: Mock<(id: string) => Promise<void>>
   dispose: Mock<(id: string) => Promise<void>>
@@ -68,6 +69,14 @@ function makeStub(overrides: Partial<StubManager> = {}) {
     list: vi.fn(async () => [meta]),
     getIndex: vi.fn(async () => index),
     getStatus: vi.fn(() => ({ live: true, status: "idle" as const })),
+    getContext: vi.fn(async () => ({
+      live: true,
+      provider: "deepseek-official",
+      model: "deepseek-v4-flash",
+      maxTokens: 8192,
+      prompt: "system prompt",
+      context: "runtime context",
+    })),
     send: vi.fn(async () => {}),
     cancel: vi.fn(async () => {}),
     dispose: vi.fn(async () => {}),
@@ -103,6 +112,16 @@ describe("octopus-agent api", () => {
     expect(res.code()).toBe(200)
     expect(JSON.parse(res.text())).toEqual(DEFAULT_PRESETS)
     expect(stub.listPresets).toHaveBeenCalledOnce()
+  })
+  it("returns live session context", async () => {
+    const stub = makeStub()
+    const handler = createAgentApi(depsOf(stub))
+    const res = fakeRes()
+    await handler(fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/context`).req, res.res)
+    expect(res.code()).toBe(200)
+    const body = JSON.parse(res.text())
+    expect(body).toMatchObject({ live: true, provider: "deepseek-official", model: "deepseek-v4-flash", prompt: "system prompt" })
+    expect(stub.manager.getContext).toHaveBeenCalledWith("oct-AAAAAAA1")
   })
 
   it("creates a session", async () => {

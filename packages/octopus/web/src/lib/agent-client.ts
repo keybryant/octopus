@@ -5,6 +5,7 @@ import type {
   Artifact,
   MessageBlock,
   PresetInfo,
+  SessionContextInfo,
   SessionMeta,
 } from "./types"
 
@@ -168,6 +169,9 @@ export function createMockAgentClient(delayMs = 600): AgentClient {
         { id: "standard", name: "标准模式" },
         { id: "minimal", name: "最小模式" },
       ]
+    },
+    async getSessionContext(): Promise<SessionContextInfo> {
+      return { live: true, provider: "mock", model: "mock-flash", prompt: "mock system prompt", context: "mock runtime context" }
     },
   }
 }
@@ -337,6 +341,13 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
       const res = await fetch(`${baseUrl}/presets`)
       const body = (await res.json()) as { items?: PresetInfo[] }
       return body.items ?? []
+    },
+    async getSessionContext(targetSessionId: string): Promise<SessionContextInfo> {
+      const res = await fetch(`${baseUrl}/sessions/${targetSessionId}/context`)
+      if (!res.ok) throw new Error("getSessionContext: request failed")
+      const body = (await res.json()) as SessionContextInfo
+      if (!body || typeof body.live !== "boolean") throw new Error("getSessionContext: malformed response")
+      return body
     },
   }
 }

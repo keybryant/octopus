@@ -32,6 +32,14 @@ function createFakeClient(events?: ScriptedEvent[]) {
     { id: "standard", name: "标准模式" },
     { id: "minimal", name: "最小模式" },
   ])
+  const getSessionContextSpy = vi.fn(async () => ({
+    live: true as const,
+    provider: "deepseek-official",
+    model: "deepseek-v4-flash",
+    maxTokens: 8192,
+    prompt: "system prompt",
+    context: "runtime context",
+  }))
   const client: AgentClient = {
     startSession: startSessionSpy,
     switchTo: switchToSpy,
@@ -49,6 +57,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     answerApproval: answerApprovalSpy,
     reply: vi.fn(async () => ({ blocks: [] })),
     listPresets: listPresetsSpy,
+    getSessionContext: getSessionContextSpy,
   }
   const emit = (ev: ScriptedEvent): void => {
     const next: AgentStreamEvent = { ...ev, idx: ++idx } as AgentStreamEvent
@@ -65,6 +74,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     historySpy,
     listSessionsSpy,
     listPresetsSpy,
+    getSessionContextSpy,
   }
 }
 
@@ -196,6 +206,24 @@ describe("ChatPane", () => {
     await user.keyboard("{Enter}")
     await waitFor(() => expect(fake.sendSpy).toHaveBeenCalledWith("main", "q1"))
     await waitFor(() => expect(screen.queryByTitle("pending-question")).not.toBeInTheDocument())
+  })
+
+  it("context viewer opens sheet with system prompt and runtime context", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    fake.sessions.push({ id: "s-1", createdAt: "2026-08-28T10:00:00.000Z", cwd: "C:/work", title: "冲刺周计划", live: true })
+    render(<ChatPane agentClient={fake.client} />)
+
+    await waitFor(() => expect(screen.getByTestId("session-switcher")).toBeEnabled())
+    await user.click(screen.getByTestId("session-switcher"))
+    await screen.findByText("冲刺周计划")
+    await user.keyboard("{Escape}")
+    const btn = screen.getByTestId("context-viewer")
+    await user.click(btn)
+    await waitFor(() => expect(fake.getSessionContextSpy).toHaveBeenCalledWith("s-1"))
+    expect(await screen.findByTestId("context-prompt")).toHaveTextContent("system prompt")
+    expect(screen.getByTestId("context-runtime")).toHaveTextContent("runtime context")
+    expect(screen.getByText(/deepseek-official/)).toBeInTheDocument()
   })
 
   it("preset switcher lists presets and new session forwards the selection", async () => {

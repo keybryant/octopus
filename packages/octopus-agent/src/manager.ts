@@ -16,6 +16,10 @@ export interface AgentLike {
   ctx: { on(event: string, listener: (...args: unknown[]) => void): unknown }
   followup(message: UserMessageLike): void
   cancel(cause: AgentCancelCause): void
+  options?: { provider?: string; model?: string; maxTokens?: number }
+  session?: {
+    requestHeader?(): { provider?: string; model?: string; maxTokens?: number } | undefined
+  }
 }
 
 export interface AgentHandleLike {
@@ -65,7 +69,14 @@ export interface QuestionAnswers {
   answers: QuestionAnswer[]
 }
 
-export interface AgentRawApi {}
+export interface SessionContextInfo {
+  live: boolean
+  provider?: string
+  model?: string
+  maxTokens?: number
+  prompt?: string
+  context?: string
+}
 
 export interface ManagerDeps {
   agents: AgentsLike
@@ -76,7 +87,9 @@ export interface ManagerDeps {
   provider?: string
   model?: string
   idleTtlMs: number
-  systemPromptSection?: (agentRaw: AgentRawApi, text: string) => void
+  systemPrompt?: {
+    assemble(scope: unknown): Promise<{ prompt: string; context: string }>
+  }
 }
 
 export class ManagerError extends Error {
@@ -343,6 +356,33 @@ export class AgentManager {
     if (!pending) throw new ManagerError("APPROVAL_NOT_FOUND", `approval ${approvalId} not pending`)
     pending.resolve(decision === "allow" ? "allowed-once" : "rejected")
     this.entries.get(id)?.pendingApprovals.delete(approvalId)
+  }
+
+  async getContext(id: string): Promise<SessionContextInfo> {
+    const agent = this.requireLive(id).agent
+    const header = agent.session?.requestHeader?.()
+    let prompt: string | undefined
+    let context: string | undefined
+    if (this.deps.systemPrompt) {
+      try {
+        const assembled = await this.deps.systemPrompt.assemble(agent)
+        prompt = assembled.prompt
+        context = assembled.context
+      } catch {
+        prompt = undefined
+        context = undefined
+      }
+    }
+    const info: SessionContextInfo = { live: true }
+    if (header?.provider) info.provider = header.provider
+    else if (agent.options?.provider) info.provider = agent.options.provider
+    if (header?.model) info.model = header.model
+    else if (agent.options?.model) info.model = agent.options.model
+    if (header?.maxTokens !== undefined) info.maxTokens = header.maxTokens
+    else if (agent.options?.maxTokens !== undefined) info.maxTokens = agent.options.maxTokens
+    if (prompt !== undefined) info.prompt = prompt
+    if (context !== undefined) info.context = context
+    return info
   }
 
   async withdraw(): Promise<void> {

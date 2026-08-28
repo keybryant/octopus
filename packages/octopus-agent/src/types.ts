@@ -18,3 +18,11 @@ export interface CreateSessionInput {
   model?: string
 }
 export interface PresetInfo { id: string; name?: string; description?: string }
+export interface SessionContextInfo {
+  live: boolean
+  provider?: string
+  model?: string
+  maxTokens?: number
+  prompt?: string
+  context?: string
+}

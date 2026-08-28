@@ -92,6 +92,7 @@ export interface AgentClient {
   disposeSession(): Promise<void>
   answerApproval(id: string, decision: "allow" | "deny"): Promise<void>
   listPresets(): Promise<PresetInfo[]>
+  getSessionContext(sessionId: string): Promise<SessionContextInfo>
   reply(input: string): Promise<AgentReply>
 }
 
@@ -119,6 +120,15 @@ export interface PresetInfo {
   id: string
   name?: string
   description?: string
+}
+
+export interface SessionContextInfo {
+  live: boolean
+  provider?: string
+  model?: string
+  maxTokens?: number
+  prompt?: string
+  context?: string
 }
 
 export type ApprovalBlock = { kind: "approval"; approvalId: string; toolName: string; reason?: string }

@@ -1,5 +1,5 @@
 import { ManagerError } from "./manager.js"
-import type { AgentStreamEvent, CreateSessionInput, PresetInfo, SessionMeta } from "./types.js"
+import type { AgentStreamEvent, CreateSessionInput, PresetInfo, SessionContextInfo, SessionMeta } from "./types.js"
 
 export const BASE_PATH = "/api/octopus-agent"
 
@@ -32,6 +32,7 @@ export interface ApiDeps {
     list(): Promise<SessionMeta[]>
     getIndex(id: string, opts?: { allowResume?: boolean }): Promise<IndexLike>
     getStatus(id: string): { live: boolean; status?: "idle" | "running"; pendingApprovalId?: string }
+    getContext(id: string): Promise<SessionContextInfo>
     send(id: string, text: string, answerQuestionId?: string): Promise<void>
     cancel(id: string): Promise<void>
     dispose(id: string): Promise<void>
@@ -163,6 +164,10 @@ export function createAgentApi(deps: ApiDeps): (req: ApiRequest, res: ApiRespons
           live: true,
         }
         sendJson(res, 200, { session, events: index.list(0), lastIdx: index.lastIdx })
+        return
+      }
+      if (second && third === "context" && method === "GET") {
+        sendJson(res, 200, await manager.getContext(second))
         return
       }
       if (second && third === "status" && method === "GET") {

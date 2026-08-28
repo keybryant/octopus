@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto"
 import z from "@deepseek-ai/schemastery"
 import type { Context } from "@deepseek-ai/cordis"
+import { renderContextSnapshot, renderPrompt } from "@deepseek-ai/dsh-system-prompt"
 import { createAgentApi, BASE_PATH, type ApiRequest, type ApiResponse } from "./api.js"
 import { AgentManager, type AgentsLike, type PersistenceLike } from "./manager.js"
 
@@ -56,9 +57,18 @@ function degradedHandler(req: ApiRequest, res: ApiResponse): Promise<void> {
 
 function registerRoute(ctx: Context, manager: AgentManager | null): () => void {
   const webServer = ctx.get("webServer") as WebServerLike
-  const handler = manager ? createAgentApi({ manager, listPresets: () => resolvePresets(ctx) }) : degradedHandler
+  const handler = manager
+    ? createAgentApi({ manager, listPresets: () => resolvePresets(ctx) })
+    : degradedHandler
   const disposeRoute = webServer.register({ kind: "prefix", path: BASE_PATH, handler })
   return () => { disposeRoute() }
+}
+
+interface SystemPromptLike {
+  assemble(context?: unknown): Promise<{
+    sections?: unknown[]
+    contexts?: unknown[]
+  }>
 }
 
 interface AgentPresetsLike {
@@ -94,6 +104,15 @@ export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Pr
   }
   const defaultModel = ctx.get("agentDefaultModel") as DefaultModelLike | undefined
   const selection = typeof defaultModel?.currentSelection === "function" ? defaultModel.currentSelection() : undefined
+  const systemPromptService = ctx.get("systemPrompt") as SystemPromptLike | undefined
+  const systemPrompt = systemPromptService
+    ? {
+        assemble: async (agent: unknown) => {
+          const assembly = await systemPromptService.assemble({ agent, scope: agent } as never)
+          return { prompt: renderPrompt(assembly as never), context: renderContextSnapshot(assembly as never) }
+        },
+      }
+    : undefined
   const manager = new AgentManager({
     agents: ctx.get("agents") as AgentsLike,
     persistence,
@@ -103,6 +122,7 @@ export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Pr
     provider: config.provider ?? selection?.provider,
     model: config.model ?? selection?.model,
     idleTtlMs: config.idleTtlMs ?? 30 * 60 * 1000,
+    systemPrompt,
   })
   ctx.effect(() => {
     const disposeRoute = registerRoute(ctx, manager)
