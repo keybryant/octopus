@@ -6,3 +6,5 @@ web-dist/
 *.tsbuildinfo
 *.log
 .superpowers/
+.env*
+!.env.example
