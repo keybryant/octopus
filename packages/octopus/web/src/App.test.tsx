@@ -6,6 +6,7 @@ import { OCTOPUS_DECOMPOSE_EVENT } from "octopus-ui"
 import App from "./App"
 import { createProject, deleteProject, fetchConfig, fetchModules, fetchProjects, updateProject } from "./api"
 import { fetchMe, redirectToLogin } from "./lib/auth"
+import { createDefaultAgentClient, createMockAgentClient } from "./lib/agent-client"
 
 vi.mock("./api", () => ({
   fetchConfig: vi.fn().mockResolvedValue(null),
@@ -42,6 +43,17 @@ vi.mock("./lib/auth", () => ({
 }))
 const mockedFetchMe = vi.mocked(fetchMe)
 const mockedRedirectToLogin = vi.mocked(redirectToLogin)
+
+// 探测异步：默认 resolve 脚本 mock client（保留既有聊天空转/流式断言），
+// 需要注入 spy client 的用例用 mockResolvedValueOnce 覆盖。
+vi.mock("./lib/agent-client", async () => {
+  const actual = await vi.importActual<typeof import("./lib/agent-client")>("./lib/agent-client")
+  return {
+    ...actual,
+    createDefaultAgentClient: vi.fn(async () => actual.createMockAgentClient(0)),
+  }
+})
+const mockedCreateDefaultAgentClient = vi.mocked(createDefaultAgentClient)
 
 // App 在 fetchMe 落定前不渲染任何受保护内容，故先等待身份检查完成
 async function renderApp() {
@@ -120,6 +132,25 @@ describe("App (v5 agent homepage)", () => {
     // 流式事件：assistant-text 段落 + tool-call 派生产出物
     expect(await screen.findByText(/结合截止时间和阻塞关系/, {}, { timeout: 3000 })).toBeInTheDocument()
     expect(await screen.findByText("本会话产出", {}, { timeout: 3000 })).toBeInTheDocument()
+  })
+
+  it("new agent sessions use the current project workspace as cwd", async () => {
+    const client = createMockAgentClient(0)
+    const startSessionSpy = vi.fn(async () => "s-real")
+    client.startSession = startSessionSpy
+    mockedCreateDefaultAgentClient.mockResolvedValueOnce(client)
+    mockedFetchProjects.mockResolvedValue([{ ...apiProject, workspacePath: "/real/ws" }])
+    const user = userEvent.setup()
+    await renderApp()
+    // (a) 探测异步：chat 欢迎语最终渲染
+    expect(
+      await screen.findByText(/当前上下文：Octopus Platform/, {}, { timeout: 3000 }),
+    ).toBeInTheDocument()
+    // (b) 新建会话把当前项目工作区传给 startSession
+    await waitFor(() => expect(screen.getByTestId("session-switcher")).toBeEnabled())
+    await user.click(screen.getByTestId("session-switcher"))
+    await user.click(await screen.findByText("新建会话"))
+    expect(startSessionSpy).toHaveBeenCalledWith({ cwd: "/real/ws" })
   })
 
   it("artifacts rail collapses and restores", async () => {

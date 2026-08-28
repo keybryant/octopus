@@ -11,6 +11,8 @@ pnpm dev:noopen # 同上但不打开浏览器
 
 启动后访问 `http://127.0.0.1:3080/workbench`。
 
+**说明**：`octopus-agent` 挂载后，工作台聊天即为真实 dsh agent 会话（需 `DEEPSEEK_API_KEY` 环境变量或 `$DSH_HOME/settings.yaml` 的 `llm-deepseek` 段）；未挂载时聊天自动回退脚本 mock。Agent 的审批/问题通道在聊天内以按钮/横幅呈现；会话权限沿用平台 `workspace-write`。
+
 ## 结构
 
 - `packages/octopus`：工作台壳插件，提供 `ctx.workbench` 服务契约与 `/workbench` 页面
