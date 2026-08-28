@@ -122,12 +122,7 @@ export default function TasksModule() {
   }
 
   return (
-    <section className="p-4">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-xs text-text-faint">从需求列表行内「拆解任务」入口拆分新任务</span>
-        <span className="font-mono text-[11px] text-text-faint">{tasks.length} 个</span>
-      </div>
-
+    <section className="p-5">
       {loading ? (
         <div className="flex justify-center py-10">
           <Spinner />

@@ -200,6 +200,7 @@ export default function App() {
               open={drawer === "tasks"}
               onClose={() => setDrawer(null)}
               entry={tasksEntry}
+              projectName={current?.name}
             />
             <RequirementsDrawer
               open={drawer === "reqs"}

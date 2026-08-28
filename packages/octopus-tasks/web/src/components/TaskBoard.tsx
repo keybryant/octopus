@@ -39,6 +39,7 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
   setDragOver: Dispatch<SetStateAction<TaskStatus | null>>
 }) {
   const isOver = dragOver === column.key
+  const dimColumn = column.key === "done"
   return (
     <div
       className="w-60 shrink-0"
@@ -59,13 +60,9 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
       <div className="mb-3 flex items-center gap-2">
         <span className="h-2 w-2 rounded-full" style={{ background: column.dotColor }} />
         <span className="text-xs font-medium text-muted-foreground">{column.label}</span>
-        <span className="font-mono text-[11px] text-text-faint">{tasks.length}</span>
+        <span className="mono text-[11px] text-text-faint">{tasks.length}</span>
       </div>
-      <div
-        className={`space-y-2.5 rounded-xl p-1 transition-colors ${
-          isOver ? "bg-surface-hover ring-1 ring-inset ring-border-strong" : ""
-        }`}
-      >
+      <div className={`space-y-2.5 ${dimColumn ? "opacity-75" : ""}`}>
         {tasks.map((t) => (
           <div
             key={t.id}
@@ -75,27 +72,21 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
               e.dataTransfer.effectAllowed = "move"
             }}
             className={`cursor-pointer rounded-xl border border-border bg-surface p-3.5 transition-colors duration-fast hover:bg-surface-hover ${
-              t.status === "done" ? "opacity-75" : ""
+              t.status === "doing" ? "border-l-2 border-l-accent" : ""
             }`}
           >
             <div className="mb-1 flex items-center gap-2">
-              <span className="font-mono text-[10.5px] text-text-faint">{t.id}</span>
+              <span className="mono text-[10.5px] text-text-faint">{t.id}</span>
               {busyIds.has(t.id) && <Spinner className="ml-auto h-3 w-3" />}
-            </div>
-            <div className={`text-[13px] font-medium leading-snug ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>
-              {t.title}
-            </div>
-            <div className="mt-2 flex items-center justify-end gap-2">
-              {t.status !== "done" && (
+              {t.status !== "done" && !busyIds.has(t.id) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
                       type="button"
                       aria-label={`切换状态 ${t.id}`}
-                      disabled={busyIds.has(t.id)}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground disabled:opacity-50"
+                      className="ml-auto flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast hover:bg-surface-hover hover:text-foreground"
                     >
-                      <ChevronDown className="h-3.5 w-3.5" />
+                      <ChevronDown className="h-3 w-3" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
@@ -107,6 +98,9 @@ function ColumnBody({ column, tasks, busyIds, onMove, dragOver, setDragOver }: {
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
+            </div>
+            <div className={`text-[13px] font-medium leading-snug ${t.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+              {t.title}
             </div>
           </div>
         ))}

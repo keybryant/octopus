@@ -6,6 +6,8 @@ export interface TasksDrawerProps {
   open: boolean
   onClose: () => void
   entry: string | undefined
+  /** v5 设计：抽屉副标题为当前项目名（如 “Octopus Platform · 迭代 4.2”） */
+  projectName?: string
 }
 
 class DrawerErrorBoundary extends Component<{ children: ReactNode; title: string }, { failed: boolean }> {
@@ -37,9 +39,9 @@ function DrawerContent({ entry, title }: { entry: string; title: string }) {
 }
 
 /** 任务看板：右侧抽屉加载 octopus-tasks 插件 UI */
-export function TasksDrawer({ open, onClose, entry }: TasksDrawerProps) {
+export function TasksDrawer({ open, onClose, entry, projectName }: TasksDrawerProps) {
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && onClose()} title="任务看板" subtitle="由 octopus-tasks 插件提供">
+    <Sheet open={open} onOpenChange={(o) => !o && onClose()} title="任务看板" subtitle={projectName ?? "由 octopus-tasks 插件提供"}>
       {entry === undefined ? (
         <div className="text-sm text-danger">未安装任务模块</div>
       ) : (

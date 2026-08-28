@@ -37,7 +37,6 @@ describe("TasksModule", () => {
     }
     expect(screen.getByText("TASK-2800")).toBeInTheDocument()
     expect(screen.getByText("联调测试")).toBeInTheDocument()
-    expect(screen.getByText("3 个")).toBeInTheDocument()
   })
 
   it("拖拽迁卡：drop → PATCH status，乐观更新列归属", async () => {
@@ -220,7 +219,8 @@ describe("TasksModule 拆解流程", () => {
   it("无载荷时不出弹窗", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, { ok: true, data: [] })))
     render(<TasksModule />)
-    expect(await screen.findByText("从需求列表行内「拆解任务」入口拆分新任务")).toBeInTheDocument()
+    expect(await screen.findByRole("group", { name: "待处理" })).toBeInTheDocument()
+    expect(screen.getAllByText("暂无任务").length).toBe(4)
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 })
