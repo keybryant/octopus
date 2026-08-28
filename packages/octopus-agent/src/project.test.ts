@@ -39,9 +39,17 @@ describe("projectEvents", () => {
     const t = projectEvents(st, ev(0, "turn/start", { turn: 1 }))
     expect(t).toHaveLength(1)
     expect(toStreamEvent(t[0])).toMatchObject({ type: "turn", at: "start" })
-    const a = projectEvents(st, ev(1, "approval/asked", { id: "a1", toolName: "fs_write", reason: "write outside workspace?" }))
+    const e = projectEvents(st, ev(1, "turn/end", { turn: 1, reason: { kind: "cancelled" } }))
+    expect(e).toHaveLength(1)
+    expect(toStreamEvent(e[0])).toMatchObject({ type: "turn", at: "end", reason: "cancelled" })
+    const a = projectEvents(st, ev(2, "approval/asked", { id: "a1", toolName: "fs_write", reason: "write outside workspace?" }))
     expect(a).toHaveLength(1)
     expect(toStreamEvent(a[0])).toMatchObject({ type: "approval", id: "a1", toolName: "fs_write" })
+  })
+  it("filters plugin context messages from the runtime", () => {
+    const st = createProjectState()
+    const evs = projectEvents(st, ev(0, "user/message", { text: "Current runtime context...", source: { kind: "plugin", plugin: "x" } }))
+    expect(evs).toEqual([])
   })
   it("ignores chunk and unknown events", () => {
     const st = createProjectState()

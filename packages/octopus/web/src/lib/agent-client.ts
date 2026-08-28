@@ -291,12 +291,13 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
       const body = (await res.json()) as { session?: SessionMeta }
       if (!body.session) throw new Error("startSession: no session in response")
       sessionId = body.session.id
+      openStream()
       return body.session.id
     },
     async switchTo(nextSessionId: string): Promise<void> {
       sessionId = nextSessionId
       lastIdx = -1
-      closeStream()
+      openStream()
     },
     async listSessions(): Promise<SessionMeta[]> {
       const res = await fetch(`${baseUrl}/sessions`)

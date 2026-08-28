@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { AgentManager, type AgentHandleLike, type AgentLike, type ManagerDeps, type PersistenceLike } from "./manager.js"
+import { AgentManager, type AgentHandleLike, type AgentLike, type ApprovalOutcomeLike, type ManagerDeps, type PersistenceLike } from "./manager.js"
 
 type TestAgent = AgentLike & { emit(event: string, ...args: unknown[]): unknown }
 
@@ -132,6 +132,14 @@ describe("AgentManager", () => {
     expect(manager.getStatus("oct-AAAAAAA1")).toMatchObject({ live: true, status: "idle" })
   })
 
+  it("cancels the live agent with a user-kind cause", async () => {
+    const { manager, agents } = makeManager()
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    await manager.cancel(meta.id)
+    expect(handle.agent.cancel).toHaveBeenCalledWith({ kind: "user" })
+  })
+
   it("answers pending approvals and errors on unknown approval id", async () => {
     const { manager } = makeManager()
     const meta = await manager.create({})
@@ -148,7 +156,7 @@ describe("AgentManager", () => {
     const agent = handle.agent as TestAgent
     agent.emit("session/event", { id: meta.id }, { seq: 0, time: 1, type: "user/message", data: { text: "hi there" } })
     agent.emit("agent/status", { status: "running" })
-    const outcome = agent.emit("approval/request", { toolName: "fs_write", reason: "why" }) as Promise<"allow" | "deny" | "cancelled">
+    const outcome = agent.emit("approval/request", { toolName: "fs_write", reason: "why" }) as Promise<ApprovalOutcomeLike>
     const idx = await manager.getIndex(meta.id)
     expect(idx.list()).toHaveLength(3)
     expect(idx.list()[0]).toMatchObject({ type: "user-message", text: "hi there" })
@@ -156,8 +164,24 @@ describe("AgentManager", () => {
     expect(idx.list()[2]).toMatchObject({ type: "approval", id: `${meta.id}:a0`, toolName: "fs_write" })
     expect(manager.getStatus(meta.id).pendingApprovalId).toBe(`${meta.id}:a0`)
     await manager.answerApproval(meta.id, `${meta.id}:a0`, "deny")
-    await expect(outcome).resolves.toBe("deny")
+    await expect(outcome).resolves.toBe("rejected")
     expect(manager.getStatus(meta.id).pendingApprovalId).toBeUndefined()
+  })
+
+  it("resolves approval outcomes in the dsh vocabulary and cancels on dispose", async () => {
+    const { manager, agents } = makeManager()
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    const agent = handle.agent as TestAgent
+    const allowed = agent.emit("approval/request", { toolName: "fs_write" }) as Promise<ApprovalOutcomeLike>
+    await manager.answerApproval(meta.id, `${meta.id}:a0`, "allow")
+    await expect(allowed).resolves.toBe("allowed-once")
+    const rejected = agent.emit("approval/request", { toolName: "fs_write" }) as Promise<ApprovalOutcomeLike>
+    await manager.answerApproval(meta.id, `${meta.id}:a1`, "deny")
+    await expect(rejected).resolves.toBe("rejected")
+    const cancelled = agent.emit("approval/request", { toolName: "fs_write" }) as Promise<ApprovalOutcomeLike>
+    await manager.dispose(meta.id)
+    await expect(cancelled).resolves.toBe("cancelled")
   })
 
   it("merges snapshots with live entries and evicts long-idle sessions", async () => {

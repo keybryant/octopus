@@ -13,6 +13,21 @@ function streamText(events: Array<{ idx: number; payload: unknown }>): { ok: boo
 
 const SESSION_S1 = { id: "s1", createdAt: "t", cwd: null, title: "t", live: true }
 
+class FakeEventSource {
+  static instances: FakeEventSource[] = []
+  url: string
+  onmessage: ((ev: { data: string }) => void) | null = null
+  onerror: (() => void) | null = null
+  closed = false
+  constructor(url: string) {
+    this.url = url
+    FakeEventSource.instances.push(this)
+  }
+  close(): void {
+    this.closed = true
+  }
+}
+
 describe("createMockAgentClient", () => {
   it("returns mock session meta and id", async () => {
     const client = createMockAgentClient(0)
@@ -169,7 +184,7 @@ describe("createHttpAgentClient", () => {
     const received: AgentStreamEvent[] = []
     const unsub = client.subscribe((ev) => received.push(ev))
 
-    const es = FakeEventSource.instances[0]
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1]
     expect(es.url).toBe("/api/octopus-agent/sessions/s1/events?after=0")
     es.onmessage?.({ data: JSON.stringify({ idx: 0, type: "user-message", text: "old" }) })
     es.onmessage?.({ data: JSON.stringify({ idx: 0, type: "user-message", text: "dup" }) })
@@ -179,6 +194,61 @@ describe("createHttpAgentClient", () => {
 
     unsub()
     expect(es.closed).toBe(true)
+  })
+
+  it("opens exactly one live stream when subscribe runs before startSession", async () => {
+    FakeEventSource.instances = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/octopus-agent/sessions") return plain({ session: SESSION_S1 }) as never
+      return plain({}) as never
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("EventSource", FakeEventSource)
+    const client = createHttpAgentClient()
+    client.subscribe(() => {})
+    await client.startSession()
+    expect(FakeEventSource.instances).toHaveLength(1)
+    expect(FakeEventSource.instances[0].url).toBe("/api/octopus-agent/sessions/s1/events?after=0")
+  })
+
+  it("switchTo closes the previous stream and opens a new one for the new session", async () => {
+    FakeEventSource.instances = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/octopus-agent/sessions") return plain({ session: SESSION_S1 }) as never
+      return plain({}) as never
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("EventSource", FakeEventSource)
+    const client = createHttpAgentClient()
+    await client.startSession()
+    await client.switchTo("s2")
+    expect(FakeEventSource.instances).toHaveLength(2)
+    expect(FakeEventSource.instances[0].closed).toBe(true)
+    expect(FakeEventSource.instances[1].url).toBe("/api/octopus-agent/sessions/s2/events?after=0")
+  })
+
+  it("drops events with idx at or below lastIdx", async () => {
+    FakeEventSource.instances = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === "/api/octopus-agent/sessions") return plain({ session: SESSION_S1 }) as never
+      return plain({}) as never
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("EventSource", FakeEventSource)
+    const client = createHttpAgentClient()
+    await client.startSession()
+    const received: AgentStreamEvent[] = []
+    client.subscribe((ev) => received.push(ev))
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+    es.onmessage?.({ data: JSON.stringify({ type: "status", status: "running", idx: 1 }) })
+    es.onmessage?.({ data: JSON.stringify({ type: "status", status: "idle", idx: 1 }) })
+    es.onmessage?.({ data: JSON.stringify({ type: "status", status: "running", idx: 2 }) })
+    es.onmessage?.({ data: JSON.stringify({ type: "user-message", text: "old", idx: 1 }) })
+    es.onmessage?.({ data: JSON.stringify({ type: "user-message", text: "dup", idx: 2 }) })
+    expect(received.map((ev) => ev.idx)).toEqual([1, 2])
   })
 
   it("sends messages, cancels and approves via the right routes", async () => {

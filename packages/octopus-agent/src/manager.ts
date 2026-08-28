@@ -8,12 +8,14 @@ export interface UserMessageLike {
   source: { kind: "user" }
 }
 
+export type AgentCancelCause = { readonly kind: "user" }
+
 export interface AgentLike {
   id: string
   status: "idle" | "running"
   ctx: { on(event: string, listener: (...args: unknown[]) => void): unknown }
   followup(message: UserMessageLike): void
-  cancel(cause: string): void
+  cancel(cause: AgentCancelCause): void
 }
 
 export interface AgentHandleLike {
@@ -50,7 +52,7 @@ export interface ApprovalLike {
   reason?: string
 }
 
-export type ApprovalOutcomeLike = "allow" | "deny" | "cancelled"
+export type ApprovalOutcomeLike = "allowed-once" | "rejected" | "cancelled"
 export type ApprovalDecision = "allow" | "deny"
 
 export interface QuestionAnswer {
@@ -321,7 +323,7 @@ export class AgentManager {
   }
 
   async cancel(id: string): Promise<void> {
-    this.requireLive(id).agent.cancel("user")
+    this.requireLive(id).agent.cancel({ kind: "user" })
   }
 
   async dispose(id: string): Promise<void> {
@@ -339,7 +341,7 @@ export class AgentManager {
   async answerApproval(id: string, approvalId: string, decision: ApprovalDecision): Promise<void> {
     const pending = this.entries.get(id)?.pendingApprovals.get(approvalId)
     if (!pending) throw new ManagerError("APPROVAL_NOT_FOUND", `approval ${approvalId} not pending`)
-    pending.resolve(decision)
+    pending.resolve(decision === "allow" ? "allowed-once" : "rejected")
     this.entries.get(id)?.pendingApprovals.delete(approvalId)
   }
 

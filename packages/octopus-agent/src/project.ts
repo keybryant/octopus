@@ -48,6 +48,7 @@ export function projectEvents(st: ProjectState, ev: SessionEventLike): CapturedE
   const d = ev.data
   switch (ev.type) {
     case "user/message": {
+      if ((d.source as { kind?: unknown } | undefined)?.kind === "plugin") return []
       let text = ""
       if (typeof d.text === "string") text = d.text
       else if (Array.isArray(d.content)) {
@@ -61,7 +62,7 @@ export function projectEvents(st: ProjectState, ev: SessionEventLike): CapturedE
     case "turn/start": return [{ sourceSeq: ev.seq, type: "turn-start", payload: {} }]
     case "turn/end": {
       const payload: Record<string, unknown> = {}
-      if (d.reason !== undefined) payload.reason = String(d.reason)
+      if (d.reason !== undefined) payload.reason = reasonText(d.reason)
       return [{ sourceSeq: ev.seq, type: "turn-end", payload }]
     }
     case "approval/asked": {
@@ -89,6 +90,14 @@ export function projectEvents(st: ProjectState, ev: SessionEventLike): CapturedE
     }
     default: return []
   }
+}
+
+function reasonText(reason: unknown): string {
+  if (typeof reason === "string") return reason
+  if (typeof reason === "object" && reason !== null && typeof (reason as { kind?: unknown }).kind === "string") {
+    return (reason as { kind: string }).kind
+  }
+  return JSON.stringify(reason)
 }
 
 function stripIdx(e: AgentStreamEvent): Omit<AgentStreamEvent, "idx"> {
