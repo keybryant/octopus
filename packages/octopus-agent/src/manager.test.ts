@@ -103,7 +103,10 @@ describe("AgentManager", () => {
     expect(typeof sent.id).toBe("string")
     expect(sent.content[0]).toEqual({ type: "text", text: "你好" })
     expect(sent.source).toEqual({ kind: "user" })
-    await expect(manager.send("oct-UNKNOWN", "x")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" })
+    const failing = makeManager({
+      persistLoad: vi.fn(async () => { throw new Error("not found") }),
+    })
+    await expect(failing.manager.send("oct-UNKNOWN", "x")).rejects.toMatchObject({ code: "SESSION_NOT_FOUND" })
   })
 
   it("throws SESSION_EXISTS on duplicate id and SESSION_NOT_FOUND on unknown", async () => {
@@ -133,8 +136,18 @@ describe("AgentManager", () => {
     expect(manager.getStatus("oct-AAAAAAA1")).toMatchObject({ live: true, status: "idle" })
   })
 
-  it("getContext resumes a persisted session and yields its prompt", async () => {
+  it("send resumes a persisted session before following up", async () => {
     const { manager, agents } = makeManager({
+      persistLoad: async () => ({ meta: { cwd: "/x", createdAt: 1 }, events: [] }),
+    })
+    await manager.send("oct-AAAAAAA1", "继续聊")
+    expect(agents.resume).toHaveBeenCalledOnce()
+    const handle = (await agents.resume.mock.results[0].value) as AgentHandleLike
+    const sent = (handle.agent.followup as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as { id?: unknown }
+    expect(typeof sent.id).toBe("string")
+  })
+
+  it("getContext resumes a persisted session and yields its prompt", async () => {    const { manager, agents } = makeManager({
       persistLoad: async () => ({ meta: { cwd: "/x", createdAt: 1 }, events: [] }),
       deps: {
         systemPrompt: {

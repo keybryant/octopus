@@ -308,19 +308,39 @@ export class AgentManager {
   }
 
   async send(id: string, text: string, answerQuestionId?: string): Promise<void> {
-    const entry = this.entries.get(id)
+    const found = this.entries.get(id)
+    if (found?.handle) {
+      return this.sendLive(found, text, answerQuestionId)
+    }
     if (answerQuestionId !== undefined) {
-      const pending = entry?.pendingQuestions.get(answerQuestionId)
+      const pending = found?.pendingQuestions.get(answerQuestionId)
       if (pending) {
         pending.resolve({ answers: [{ id: pending.callerItemId, selected: [], custom: text }] })
-        entry?.pendingQuestions.delete(answerQuestionId)
-        if (entry) entry.lastActivityMs = this.currentNow()
+        found?.pendingQuestions.delete(answerQuestionId)
         return
       }
     }
-    const handle = this.requireLive(id)
-    handle.agent.followup(createUserMessage({ content: [{ type: "text", text }], source: { kind: "user" } }))
-    if (entry) entry.lastActivityMs = this.currentNow()
+    let entry: SessionEntry
+    try {
+      entry = await this.ensureLoaded(id)
+    } catch {
+      throw new ManagerError("SESSION_NOT_FOUND", `session ${id} not live or persisted`)
+    }
+    await this.sendLive(entry, text, answerQuestionId)
+  }
+
+  private async sendLive(entry: SessionEntry, text: string, answerQuestionId?: string): Promise<void> {
+    if (answerQuestionId !== undefined) {
+      const pending = entry.pendingQuestions.get(answerQuestionId)
+      if (pending) {
+        pending.resolve({ answers: [{ id: pending.callerItemId, selected: [], custom: text }] })
+        entry.pendingQuestions.delete(answerQuestionId)
+        entry.lastActivityMs = this.currentNow()
+        return
+      }
+    }
+    entry.handle!.agent.followup(createUserMessage({ content: [{ type: "text", text }], source: { kind: "user" } }))
+    entry.lastActivityMs = this.currentNow()
   }
 
   beginQuestion(sessionId: string, item: QuestionItem): { qid: string; answerPromise: Promise<QuestionAnswers> } {
