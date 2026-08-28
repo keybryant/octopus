@@ -5,6 +5,14 @@ import { serveStaticFiles } from "octopus"
 import { createTaskApiHandler } from "./routes.js"
 import { TaskStore } from "./store.js"
 
+export type { TaskDraft, TaskRecord, TaskStatus } from "./types.js"
+
+declare module "@deepseek-ai/cordis" {
+  interface Context {
+    taskStore: import("./store.js").TaskStore
+  }
+}
+
 export const name = "octopus-tasks"
 export const inject = ["workbench", "webServer", "storageDomain"]
 
@@ -15,6 +23,7 @@ const DIST_DIR = join(HERE, "..", "web", "dist")
 export function apply(ctx: Context) {
   ctx.effect(async () => {
     const store = await TaskStore.open(ctx)
+    ctx.provide("taskStore", store)
 
     const disposers: (() => void)[] = [
       ctx.workbench.register({

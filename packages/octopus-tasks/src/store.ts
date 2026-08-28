@@ -145,6 +145,44 @@ export class TaskStore {
     })
   }
 
+  /** 关联/解除任务子会话（workflow 内部专用：REST 不暴露）。sessionId 传 null 时清除关联 */
+  async attachSession(id: string, sessionId: string | null): Promise<TaskRecord> {
+    if (sessionId !== null && !sessionId.trim()) {
+      throw new TasksError("invalid-input", "sessionId is required")
+    }
+    return this.setField(id, (record) => ({ ...record, agentSessionId: sessionId ?? undefined }))
+  }
+
+  /** 写入子 agent 自报总结（workflow 内部专用：REST 不暴露） */
+  async setAgentSummary(id: string, summary: string): Promise<TaskRecord> {
+    const text = summary.trim()
+    if (!text) throw new TasksError("invalid-input", "summary is required")
+    return this.setField(id, (record) => ({ ...record, agentSummary: text }))
+  }
+
+  /** 停止会话后回退到待处理（跳过迁移校验，仅 workflow 内部使用） */
+  async reopen(id: string): Promise<TaskRecord> {
+    if (!this.domain.table(TASK_TABLE).get(id)) {
+      throw new TasksError("not-found", `task ${id} not found`)
+    }
+    return this.domain.table(TASK_TABLE).update(id, (current) => ({
+      ...current,
+      status: "todo",
+      updatedAt: new Date().toISOString(),
+    }))
+  }
+
+  /** 写链槽位内字段级更新（attachSession/setAgentSummary 共用） */
+  private async setField(id: string, apply: (record: TaskRecord) => TaskRecord): Promise<TaskRecord> {
+    if (!this.domain.table(TASK_TABLE).get(id)) {
+      throw new TasksError("not-found", `task ${id} not found`)
+    }
+    return this.domain.table(TASK_TABLE).update(id, (current) => {
+      const next = apply(current)
+      return { ...next, updatedAt: new Date().toISOString() }
+    })
+  }
+
   async remove(id: string): Promise<boolean> {
     return this.domain.table(TASK_TABLE).delete(id)
   }

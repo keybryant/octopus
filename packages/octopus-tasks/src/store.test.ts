@@ -194,3 +194,50 @@ describe("TaskStore", () => {
     expect(new Set(ids).size).toBe(4)
   })
 })
+
+describe("TaskStore agent session fields", () => {
+  let harness: Awaited<ReturnType<typeof createHarness>>
+  let store: TaskStore
+
+  beforeEach(async () => {
+    harness = await createHarness()
+    store = harness.store
+  })
+
+  afterEach(async () => {
+    await store.close()
+    await rm(harness.root, { recursive: true, force: true })
+  })
+
+  it("attachSession 关联会话 id，重复调用覆盖", async () => {
+    const task = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+    const linked = await store.attachSession(task.id, "task-AAAA1111")
+    expect(linked.agentSessionId).toBe("task-AAAA1111")
+    const relinked = await store.attachSession(task.id, "task-BBBB2222")
+    expect(relinked.agentSessionId).toBe("task-BBBB2222")
+    expect(store.get(task.id)?.updatedAt).toBe(relinked.updatedAt)
+  })
+
+  it("attachSession 传 null 清除关联；未知任务抛 not-found", async () => {
+    const task = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+    await store.attachSession(task.id, "task-AAAA1111")
+    const cleared = await store.attachSession(task.id, null)
+    expect(cleared.agentSessionId).toBeUndefined()
+    await expect(store.attachSession("TASK-9999", "task-AAAA1111")).rejects.toMatchObject({ code: "not-found" })
+  })
+
+  it("setAgentSummary 去空格写入；空串拒绝", async () => {
+    const task = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+    const summarized = await store.setAgentSummary(task.id, "  完成了导出模块  ")
+    expect(summarized.agentSummary).toBe("完成了导出模块")
+    await expect(store.setAgentSummary(task.id, "   ")).rejects.toMatchObject({ code: "invalid-input" })
+  })
+
+  it("reopen 将 doing 回退 todo（不校验迁移），未知任务抛 not-found", async () => {
+    const task = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+    await store.update(task.id, { status: "doing" })
+    const reopened = await store.reopen(task.id)
+    expect(reopened.status).toBe("todo")
+    await expect(store.reopen("TASK-9999")).rejects.toMatchObject({ code: "not-found" })
+  })
+})

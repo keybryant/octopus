@@ -8,6 +8,8 @@ const taskSchema = z.object({
   requirementId: z.string(),
   projectId: z.string().min(1),
   status: z.enum(["todo", "doing", "review", "done"]),
+  agentSessionId: z.string().optional(),
+  agentSummary: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 })

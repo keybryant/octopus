@@ -9,6 +9,10 @@ export interface TaskRecord {
   requirementId: string
   projectId: string
   status: TaskStatus
+  /** 任务子会话 id（octopus-workflow 内部写入；REST 客户端不可指定） */
+  agentSessionId?: string
+  /** 子 agent 完成时自报的简短总结（octopus-workflow 内部写入） */
+  agentSummary?: string
   createdAt: string
   updatedAt: string
 }
