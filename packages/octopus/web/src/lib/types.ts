@@ -46,7 +46,7 @@ export type MessageBlock =
   | { kind: "cards"; cards: PriorityCard[] }
   | { kind: "actions"; actions: string[] }
   | { kind: "code"; filename: string; code: string }
-  | { kind: "notice"; title: string; hint: string }
+  | { kind: "notice"; title: string; hint: string; tone?: "info" | "danger" }
   | { kind: "approval"; approvalId: string; toolName: string; reason?: string }
 
 export interface ChatMessage {

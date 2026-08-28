@@ -215,6 +215,36 @@ describe("useChat", () => {
     ).toBe(true)
   })
 
+  it("tool-result ok:true adds no extra block; ok:false adds danger notice", async () => {
+    const fake = createFakeClient()
+    const { result } = renderHook(() => useChat(fake.client))
+    await act(async () => undefined)
+
+    act(() => {
+      fake.emit({ type: "turn", at: "start" })
+      fake.emit({ type: "assistant-text", text: "run" })
+      fake.emit({ type: "tool-call", callId: "d1", name: "bash", summary: "npm test" })
+      fake.emit({ type: "tool-result", callId: "d1", name: "bash", ok: true, preview: "all green" })
+      fake.emit({ type: "turn", at: "end" })
+    })
+    const msg = result.current.messages.at(-1)!
+    const notices = msg.blocks!.filter((b) => b.kind === "notice")
+    expect(notices).toHaveLength(1)
+    expect(notices[0]).toMatchObject({ kind: "notice", title: "bash", hint: "npm test" })
+    expect(notices[0].tone).toBeUndefined()
+
+    act(() => {
+      fake.emit({ type: "turn", at: "start" })
+      fake.emit({ type: "assistant-text", text: "write" })
+      fake.emit({ type: "tool-call", callId: "d2", name: "write_file", summary: "report.md" })
+      fake.emit({ type: "tool-result", callId: "d2", name: "write_file", ok: false, preview: "permission denied" })
+      fake.emit({ type: "turn", at: "end" })
+    })
+    const dangerMsg = result.current.messages.at(-1)!
+    const dangerNotice = dangerMsg.blocks!.find((b) => b.kind === "notice" && b.tone === "danger")
+    expect(dangerNotice).toMatchObject({ kind: "notice", title: "write_file", hint: "permission denied", tone: "danger" })
+  })
+
   it("resumes most recent session replaying history through the shared reducer", async () => {
     const fake = createFakeClient()
     const meta: SessionMeta = { id: "s1", createdAt: "2026-08-28T09:00:00.000Z", cwd: null, title: "t", live: true }

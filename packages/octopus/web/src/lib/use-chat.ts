@@ -64,8 +64,8 @@ export function initialState(contextLabel?: string): ChatState {
   }
 }
 
-function notice(title: string, hint: string): MessageBlock {
-  return { kind: "notice", title, hint }
+function notice(title: string, hint: string, tone?: "info" | "danger"): MessageBlock {
+  return { kind: "notice", title, hint, tone }
 }
 
 function addArtifact(artifacts: Artifact[], name: string, callId: string, summary: string): Artifact[] {
@@ -169,7 +169,7 @@ export function reduceEvent(state: ChatState, ev: AgentStreamEvent): ChatState {
       }
     case "tool-result":
       if (ev.ok) return state
-      return anchorNotice(state, notice(ev.name, ev.preview))
+      return anchorNotice(state, notice(ev.name, ev.preview, "danger"))
     case "approval": {
       const block: ApprovalBlock = { kind: "approval", approvalId: ev.id, toolName: ev.toolName, reason: ev.reason }
       return {
