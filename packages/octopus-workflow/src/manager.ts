@@ -79,9 +79,23 @@ interface Entry {
   status: "idle" | "running"
 }
 
+interface StartInflight {
+  token: object
+  promise: Promise<{ sessionId: string; task: TaskRecord }>
+}
+
+interface ResumeInflight {
+  token: object
+  promise: Promise<Entry>
+}
+
 /** 任务子会话编排：创建/恢复/停止/追问/状态 + 事件环形缓冲 + 审批策略 */
 export class TaskSessionManager {
   private entries = new Map<string, Entry>()
+  /** start 进行中去抖：并发 start 复用同一 Promise，防双 create/双 resume */
+  private starting = new Map<string, StartInflight>()
+  /** send 懒恢复进行中去抖：并发 send 复用同一 Promise，防双 resume */
+  private resuming = new Map<string, ResumeInflight>()
   private currentNow = (): number => Date.now()
 
   constructor(private deps: ManagerDeps) {}
@@ -104,6 +118,19 @@ export class TaskSessionManager {
       if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
       return { sessionId: existing.sessionId, task }
     }
+    const inflight = this.starting.get(taskId)
+    if (inflight) return inflight.promise
+    const token = {}
+    const promise = this.doStart(taskId, token)
+    this.starting.set(taskId, { token, promise })
+    try {
+      return await promise
+    } finally {
+      if (this.starting.get(taskId)?.token === token) this.starting.delete(taskId)
+    }
+  }
+
+  private async doStart(taskId: string, token: object): Promise<{ sessionId: string; task: TaskRecord }> {
     const task = this.deps.taskStore.get(taskId)
     if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
 
@@ -125,12 +152,21 @@ export class TaskSessionManager {
           `task session create failed: ${error instanceof Error ? error.message : String(error)}`,
         )
       }
-      await this.deps.taskStore.attachSession(taskId, sessionId)
     } else {
       handle = await this.resumeOrThrow(taskId, sessionId)
     }
+    if (this.starting.get(taskId)?.token !== token) {
+      // stop 已接管（或已被新 start 取代）：不写 entry，释放刚取得的 handle
+      await handle.dispose().catch(() => {})
+      return { sessionId, task: this.deps.taskStore.get(taskId) ?? task }
+    }
+    if (fresh) await this.deps.taskStore.attachSession(taskId, sessionId)
     if (task.status === "todo") {
       await this.deps.taskStore.update(taskId, { status: "doing" })
+    }
+    if (this.starting.get(taskId)?.token !== token) {
+      await handle.dispose().catch(() => {})
+      return { sessionId, task: this.deps.taskStore.get(taskId) ?? task }
     }
     const entry: Entry = { taskId, sessionId, handle, events: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
     this.entries.set(taskId, entry)
@@ -143,6 +179,9 @@ export class TaskSessionManager {
   async stop(taskId: string): Promise<TaskRecord> {
     const task = this.deps.taskStore.get(taskId)
     if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
+    // 同步清掉 in-flight 去抖条目，使进行中的 start/send 感知到被接管而不再写 entry
+    this.starting.delete(taskId)
+    this.resuming.delete(taskId)
     const entry = this.entries.get(taskId)
     if (entry) {
       entry.handle.agent.cancel({ kind: "user" })
@@ -184,6 +223,8 @@ export class TaskSessionManager {
       await entry.handle.dispose().catch(() => {})
     }
     this.entries.clear()
+    this.starting.clear()
+    this.resuming.clear()
   }
 
   private async resumeOrThrow(taskId: string, sessionId: string): Promise<AgentHandleLike> {
@@ -203,7 +244,25 @@ export class TaskSessionManager {
   }
 
   private async loadResumed(taskId: string, sessionId: string): Promise<Entry> {
+    const inflight = this.resuming.get(taskId)
+    if (inflight) return inflight.promise
+    const token = {}
+    const promise = this.doLoadResumed(taskId, sessionId, token)
+    this.resuming.set(taskId, { token, promise })
+    try {
+      return await promise
+    } finally {
+      if (this.resuming.get(taskId)?.token === token) this.resuming.delete(taskId)
+    }
+  }
+
+  private async doLoadResumed(taskId: string, sessionId: string, token: object): Promise<Entry> {
     const handle = await this.resumeOrThrow(taskId, sessionId)
+    if (this.resuming.get(taskId)?.token !== token) {
+      // stop 已接管：不写 entry，释放 handle，并让发起方以 session-unavailable 感知
+      await handle.dispose().catch(() => {})
+      throw new WorkflowError("session-unavailable", `task ${taskId} session resume superseded by stop`)
+    }
     const entry: Entry = { taskId, sessionId, handle, events: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
     this.entries.set(taskId, entry)
     this.listenLive(taskId, entry, handle)

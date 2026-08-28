@@ -47,7 +47,7 @@ const makeProject = (): ProjectView => ({
   workspacePath: "C:/projects/alpha", workspaceId: "ws-1", createdAt: "2026-08-26T00:00:00.000Z",
 })
 
-function makeHarness(opts: { approval?: "allow" | "never" } = {}) {
+function makeHarness(opts: { approval?: "allow" | "never"; createGate?: () => Promise<void> } = {}) {
   const tasks = new Map<string, TaskRecord>()
   const taskStore = {
     get: (id: string) => tasks.get(id),
@@ -58,13 +58,13 @@ function makeHarness(opts: { approval?: "allow" | "never" } = {}) {
       tasks.set(id, next)
       return next
     },
-    attachSession: async (id: string, sessionId: string | null) => {
+    attachSession: vi.fn(async (id: string, sessionId: string | null) => {
       const current = tasks.get(id)
       if (!current) throw new Error(`task ${id} not found`)
       const next: TaskRecord = { ...current, agentSessionId: sessionId ?? undefined, updatedAt: new Date().toISOString() }
       tasks.set(id, next)
       return next
-    },
+    }),
     setAgentSummary: async (id: string, summary: string) => {
       const current = tasks.get(id)
       if (!current) throw new Error(`task ${id} not found`)
@@ -84,6 +84,7 @@ function makeHarness(opts: { approval?: "allow" | "never" } = {}) {
   const projectStore = { get: (id: string) => (id === "prjA" ? makeProject() : undefined) }
   const agents = {
     create: vi.fn(async (options: { sessionId: string }): Promise<AgentHandleLike> => {
+      if (opts.createGate) await opts.createGate()
       return { agent: fakeAgent(options.sessionId), dispose: vi.fn(async () => {}) }
     }),
     resume: vi.fn(async (options: { resumeSessionId: string }): Promise<AgentHandleLike> => {
@@ -225,6 +226,51 @@ describe("TaskSessionManager", () => {
     const denyHandle = (await deny.agents.create.mock.results[0].value) as AgentHandleLike
     const denyAgent = denyHandle.agent as ReturnType<typeof fakeAgent>
     await expect(denyAgent.emit("approval/request", { toolName: "run_code" })).resolves.toBe("rejected")
+  })
+
+  it("并发 start（fresh 任务）只 create 一次、只 attachSession 一次", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const [first, second] = await Promise.all([
+      h.manager.start("TASK-2800"),
+      h.manager.start("TASK-2800"),
+    ])
+    expect(second.sessionId).toBe(first.sessionId)
+    expect(h.agents.create).toHaveBeenCalledTimes(1)
+    expect(h.agents.resume).not.toHaveBeenCalled()
+    expect(h.taskStore.attachSession).toHaveBeenCalledTimes(1)
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toBe(first.sessionId)
+    expect(h.tasks.get("TASK-2800")?.status).toBe("doing")
+  })
+
+  it("并发 send（未加载任务）只 resume 一次，两条消息都送达", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask({ agentSessionId: "task-AAAA1111", status: "doing" }))
+    await Promise.all([
+      h.manager.send("TASK-2800", "继续"),
+      h.manager.send("TASK-2800", "再继续"),
+    ])
+    expect(h.agents.resume).toHaveBeenCalledTimes(1)
+    const handle = (await h.agents.resume.mock.results[0].value) as AgentHandleLike
+    expect(handle.agent.followup).toHaveBeenCalledTimes(2)
+  })
+
+  it("start 进行中 stop：残留 start 不写 entry、释放 handle，任务保持 todo", async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const h = makeHarness({ createGate: () => gate })
+    h.tasks.set("TASK-2800", makeTask())
+    const pending = h.manager.start("TASK-2800")
+    await Promise.resolve()
+    await h.manager.stop("TASK-2800")
+    release()
+    await pending
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toBeUndefined()
+    expect(h.tasks.get("TASK-2800")?.status).toBe("todo")
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    expect(handle.dispose).toHaveBeenCalled()
+    const after = await h.manager.status("TASK-2800")
+    expect(after.session.live).toBe(false)
   })
 
   it("createTaskSessionId 生成 task- 前缀 8 位 id", () => {
