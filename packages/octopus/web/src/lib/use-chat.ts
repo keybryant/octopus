@@ -8,6 +8,7 @@ import type {
   Artifact,
   ChatMessage,
   MessageBlock,
+  SessionMeta,
 } from "./types"
 
 export type ChatStatus = "idle" | "thinking"
@@ -27,6 +28,86 @@ export interface ChatState {
   anchorId: string | null
   /** 尚无助手消息可挂载的块（附着到下一个助手消息） */
   deferred: MessageBlock[]
+}
+
+// ── 项目 ↔ PM 会话绑定 ──────────────────────────────────────────────
+
+const PROJECT_SESSIONS_KEY = "octopus.projectSessions"
+
+export interface ProjectSessionStore {
+  get(projectId: string): string | null
+  set(projectId: string, sessionId: string): void
+}
+
+/** localStorage 持久化的 projectId → PM 会话 id 映射（隐私模式等场景降级为内存） */
+export function createProjectSessionStore(
+  storage: Pick<Storage, "getItem" | "setItem"> | null,
+): ProjectSessionStore {
+  let cache: Record<string, string> | null = null
+  const read = (): Record<string, string> => {
+    if (cache) return cache
+    try {
+      const raw = storage?.getItem(PROJECT_SESSIONS_KEY)
+      cache = raw ? (JSON.parse(raw) as Record<string, string>) : {}
+    } catch {
+      cache = {}
+    }
+    return cache
+  }
+  return {
+    get(projectId) {
+      return read()[projectId] ?? null
+    },
+    set(projectId, sessionId) {
+      const next = { ...read(), [projectId]: sessionId }
+      cache = next
+      try {
+        storage?.setItem(PROJECT_SESSIONS_KEY, JSON.stringify(next))
+      } catch {
+        /* 忽略 */
+      }
+    },
+  }
+}
+
+/** 任务执行会话（octopus-workflow 创建，id 前缀 task-） */
+export function isTaskSession(meta: Pick<SessionMeta, "id">): boolean {
+  return meta.id.startsWith("task-")
+}
+
+/** 当前项目会话（PM 会话 + 任务执行会话），按创建时间倒序 */
+export function projectSessions(sessions: SessionMeta[], workspacePath: string): SessionMeta[] {
+  return sessions
+    .filter((s) => s.cwd === workspacePath)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+}
+
+/**
+ * 解析项目的 PM 会话：映射命中（会话仍存在）优先，否则回落 cwd 匹配的
+ * 最新非任务会话；无匹配返回 null（调用方自动创建）。
+ */
+export function resolvePmSession(
+  sessions: SessionMeta[],
+  workspacePath: string,
+  bound: string | null,
+): SessionMeta | null {
+  if (bound) {
+    const hit = sessions.find((s) => s.id === bound)
+    if (hit) return hit
+  }
+  return (
+    sessions
+      .filter((s) => s.cwd === workspacePath && !isTaskSession(s))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null
+  )
+}
+
+export function defaultSessionStorage(): Pick<Storage, "getItem" | "setItem"> | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage
+  } catch {
+    return null
+  }
 }
 
 let seq = 0
@@ -194,7 +275,15 @@ export function reduceEvent(state: ChatState, ev: AgentStreamEvent): ChatState {
   }
 }
 
-export function useChat(client: AgentClient | null, opts?: { contextLabel?: string }): {
+export function useChat(
+  client: AgentClient | null,
+  opts?: {
+    contextLabel?: string
+    projectId?: string
+    workspacePath?: string
+    storage?: Pick<Storage, "getItem" | "setItem"> | null
+  },
+): {
   messages: ChatMessage[]
   status: ChatStatus
   send: (text: string) => void
@@ -205,6 +294,7 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
   decideApproval: (id: string, decision: "allow" | "deny") => void
   thinking: boolean
   switchSession: (id: string) => Promise<void>
+  switchProject: (projectId: string, workspacePath: string, sessionOpts?: { agentPreset?: string }) => Promise<void>
   newSession: (opts?: { cwd?: string; agentPreset?: string }) => Promise<string>
 } {
   const [state, setState] = useState<ChatState>(() => initialState(opts?.contextLabel))
@@ -214,7 +304,38 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
   clientRef.current = client
   const labelRef = useRef(opts?.contextLabel)
   labelRef.current = opts?.contextLabel
+  const projectRef = useRef({ projectId: opts?.projectId, workspacePath: opts?.workspacePath })
+  projectRef.current = { projectId: opts?.projectId, workspacePath: opts?.workspacePath }
+  const [store] = useState(() =>
+    createProjectSessionStore(opts?.storage !== undefined ? opts.storage : defaultSessionStorage()),
+  )
+  const projectSeqRef = useRef(0)
   const bootstrapped = useRef(false)
+
+  /** 解析/创建项目 PM 会话并载入（绑定核心） */
+  const bindProject = useCallback(async (projectId: string, workspacePath: string, sessionOpts?: { agentPreset?: string }) => {
+    const c = clientRef.current
+    if (!c) return
+    const seq = ++projectSeqRef.current
+    try {
+      const sessions = await c.listSessions()
+      const target = resolvePmSession(sessions, workspacePath, store.get(projectId))
+      if (target) {
+        store.set(projectId, target.id)
+        await c.switchTo(target.id)
+        const events = await c.history(target.id)
+        if (seq !== projectSeqRef.current) return
+        setState(events.reduce(reduceEvent, initialState(labelRef.current)))
+        return
+      }
+      const id = await c.startSession({ cwd: workspacePath, ...sessionOpts })
+      if (seq !== projectSeqRef.current) return
+      store.set(projectId, id)
+      setState(initialState(labelRef.current))
+    } catch {
+      /* 保持当前状态 */
+    }
+  }, [])
 
   useEffect(() => {
     if (!client) return
@@ -225,6 +346,11 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
       bootstrapped.current = true
       void (async () => {
         try {
+          const { projectId, workspacePath } = projectRef.current
+          if (projectId && workspacePath) {
+            await bindProject(projectId, workspacePath)
+            return
+          }
           const sessions = await client.listSessions()
           if (sessions.length === 0) {
             await client.startSession()
@@ -240,7 +366,7 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
       })()
     }
     return unsub
-  }, [client])
+  }, [client, bindProject])
 
   const send = useCallback((text: string) => {
     const trimmed = text.trim()
@@ -278,13 +404,34 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
     const events = await c.history(id)
     const next = events.reduce(reduceEvent, initialState(labelRef.current))
     setState(next)
+    // 手动切换：若目标是当前项目的 PM 会话（非任务会话），更新映射为新的活动会话
+    const { projectId, workspacePath } = projectRef.current
+    if (!projectId || !workspacePath) return
+    try {
+      const list = await c.listSessions()
+      const meta = list.find((s) => s.id === id)
+      if (meta && meta.cwd === workspacePath && !isTaskSession(meta)) {
+        store.set(projectId, id)
+      }
+    } catch {
+      /* 忽略 */
+    }
   }, [])
+
+  /** 切换项目：解析/创建该项目 PM 会话并载入（映射命中 → cwd 匹配 → 自动创建） */
+  const switchProject = useCallback(async (projectId: string, workspacePath: string, sessionOpts?: { agentPreset?: string }) => {
+    await bindProject(projectId, workspacePath, sessionOpts)
+  }, [bindProject])
 
   const newSession = useCallback(async (sessionOpts?: { cwd?: string; agentPreset?: string }) => {
     const c = clientRef.current
     if (!c) throw new Error("useChat: client is not ready")
     const id = await c.startSession(sessionOpts)
     setState(initialState(labelRef.current))
+    const { projectId, workspacePath } = projectRef.current
+    if (projectId && workspacePath && sessionOpts?.cwd === workspacePath) {
+      store.set(projectId, id)
+    }
     return id
   }, [])
 
@@ -299,6 +446,7 @@ export function useChat(client: AgentClient | null, opts?: { contextLabel?: stri
     decideApproval,
     thinking: state.status === "thinking",
     switchSession,
+    switchProject,
     newSession,
   }
 }

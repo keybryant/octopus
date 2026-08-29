@@ -66,6 +66,7 @@ describe("App (v5 agent homepage)", () => {
   afterEach(() => {
     vi.clearAllMocks()
     mockedFetchProjects.mockResolvedValue(null)
+    localStorage.clear()
   })
 
   it("renders empty project state when no projects", async () => {
@@ -134,7 +135,7 @@ describe("App (v5 agent homepage)", () => {
     expect(await screen.findByText("本会话产出", {}, { timeout: 3000 })).toBeInTheDocument()
   })
 
-  it("new agent sessions use the current project workspace as cwd", async () => {
+  it("bound mode: PM 会话自动创建，cwd 使用当前项目工作区，且隐藏新建会话", async () => {
     const client = createMockAgentClient(0)
     const startSessionSpy = vi.fn(async () => "s-real")
     client.startSession = startSessionSpy
@@ -142,15 +143,12 @@ describe("App (v5 agent homepage)", () => {
     mockedFetchProjects.mockResolvedValue([{ ...apiProject, workspacePath: "/real/ws" }])
     const user = userEvent.setup()
     await renderApp()
-    // (a) 探测异步：chat 欢迎语最终渲染
-    expect(
-      await screen.findByText(/当前上下文：Octopus Platform/, {}, { timeout: 3000 }),
-    ).toBeInTheDocument()
-    // (b) 新建会话把当前项目工作区传给 startSession
+    // (a) 绑定模式：进入项目即自动创建 PM 会话（cwd=项目工作区）
+    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/real/ws" })))
+    // (b) 项目绑定模式下会话下拉无「新建会话」入口
     await waitFor(() => expect(screen.getByTestId("session-switcher")).toBeEnabled())
     await user.click(screen.getByTestId("session-switcher"))
-    await user.click(await screen.findByText("新建会话"))
-    await waitFor(() => expect(startSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ cwd: "/real/ws" })))
+    await waitFor(() => expect(screen.queryByText("新建会话")).not.toBeInTheDocument())
   })
 
   it("artifacts rail collapses and restores", async () => {

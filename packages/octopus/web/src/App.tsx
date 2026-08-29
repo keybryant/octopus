@@ -193,7 +193,8 @@ export default function App() {
             <div className="flex min-h-0 flex-1">
               <ChatPane
                 agentClient={agentClient}
-                currentCwd={records[current?.id]?.workspacePath}
+                projectId={current?.id}
+                workspacePath={records[current?.id]?.workspacePath}
                 onArtifactsChange={onArtifactsChange}
               />
               <ArtifactsRail

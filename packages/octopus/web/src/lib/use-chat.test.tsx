@@ -1,7 +1,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AgentClient, AgentStreamEvent, SessionMeta } from "./types"
-import { initialState, reduceEvent, useChat } from "./use-chat"
+import {
+  createProjectSessionStore,
+  isTaskSession,
+  projectSessions,
+  resolvePmSession,
+  useChat,
+  initialState,
+  reduceEvent,
+} from "./use-chat"
 
 /** 与 agent-client.ts 相同的 Distributive Omit（直接 Omit 无法用于交集联合类型） */
 type WithoutIdx<T> = T extends AgentStreamEvent ? Omit<T, "idx"> : never
@@ -304,5 +312,189 @@ describe("reduceEvent", () => {
     expect(last.meta).toMatch(/^\d{2}:\d{2} · gpt-4 · \d+s$/)
     const paragraph = last.blocks?.find((b) => b.kind === "paragraph")
     expect(paragraph).toMatchObject({ kind: "paragraph", segs: [{ text: "a" }, { text: "b" }] })
+  })
+})
+
+describe("project session helpers", () => {
+  const pm = (id: string, cwd: string | null, createdAt = "2026-08-28T10:00:00.000Z"): SessionMeta => ({
+    id, cwd, title: null, live: false, createdAt,
+  })
+
+  it("isTaskSession 识别 task- 前缀", () => {
+    expect(isTaskSession({ id: "task-AAAA1111" })).toBe(true)
+    expect(isTaskSession({ id: "oct-AAAA1111" })).toBe(false)
+  })
+
+  it("projectSessions 按 cwd 过滤并按 createdAt 倒序", () => {
+    const list = [pm("s1", "/ws/a"), pm("task-x1", "/ws/a", "2026-08-28T11:00:00.000Z"), pm("s2", "/ws/b")]
+    const result = projectSessions(list, "/ws/a")
+    expect(result.map((s) => s.id)).toEqual(["task-x1", "s1"])
+  })
+
+  it("resolvePmSession：映射命中优先", () => {
+    const list = [pm("s1", "/ws/a", "2026-08-28T09:00:00.000Z"), pm("s2", "/ws/a", "2026-08-28T11:00:00.000Z")]
+    expect(resolvePmSession(list, "/ws/a", "s1")?.id).toBe("s1")
+  })
+
+  it("resolvePmSession：映射失效回落 cwd 匹配的最新非 task 会话", () => {
+    const list = [
+      pm("s1", "/ws/a", "2026-08-28T09:00:00.000Z"),
+      pm("task-x1", "/ws/a", "2026-08-28T10:00:00.000Z"),
+      pm("s2", "/ws/a", "2026-08-28T11:00:00.000Z"),
+      pm("s-other", "/ws/b", "2026-08-28T12:00:00.000Z"),
+    ]
+    expect(resolvePmSession(list, "/ws/a", "pm-dead")?.id).toBe("s2")
+    expect(resolvePmSession(list, "/ws/a", null)?.id).toBe("s2")
+  })
+
+  it("resolvePmSession：无匹配返回 null（调用方新建）", () => {
+    expect(resolvePmSession([pm("s-other", "/ws/b")], "/ws/a", null)).toBeNull()
+  })
+
+  it("createProjectSessionStore 读写与损坏容错", () => {
+    const mem: Record<string, string> = {}
+    const storage: Pick<Storage, "getItem" | "setItem"> = {
+      getItem: (k) => mem[k] ?? null,
+      setItem: (k, v) => { mem[k] = v },
+    }
+    const store = createProjectSessionStore(storage)
+    expect(store.get("prjA")).toBeNull()
+    store.set("prjA", "s1")
+    expect(store.get("prjA")).toBe("s1")
+    const reopened = createProjectSessionStore(storage)
+    expect(reopened.get("prjA")).toBe("s1")
+    const broken = createProjectSessionStore({
+      getItem: () => "{not json",
+      setItem: () => undefined,
+    })
+    expect(broken.get("prjA")).toBeNull()
+    const none = createProjectSessionStore(null)
+    none.set("prjA", "s1")
+    expect(none.get("prjA")).toBe("s1")
+  })
+})
+
+describe("useChat project binding", () => {
+  function storageHarness() {
+    const mem: Record<string, string> = {}
+    const storage: Pick<Storage, "getItem" | "setItem"> = {
+      getItem: (k) => mem[k] ?? null,
+      setItem: (k, v) => { mem[k] = v },
+    }
+    const raw = (): Record<string, string> => JSON.parse(mem["octopus.projectSessions"] ?? "{}")
+    return { storage, raw }
+  }
+
+  it("bootstrap 绑定当前项目：cwd 匹配的 PM 会话 + 历史重放 + 映射落盘", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    fake.listSessionsSpy.mockResolvedValue([
+      { id: "pm-1", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+      { id: "task-x1", createdAt: "2026-08-28T11:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+      { id: "s-other", createdAt: "2026-08-28T12:00:00.000Z", cwd: "/ws/b", title: null, live: true },
+    ])
+    fake.historySpy.mockResolvedValue([
+      { idx: 1, type: "user-message", text: "PM 历史" },
+      { idx: 2, type: "turn", at: "start" },
+      { idx: 3, type: "assistant-text", text: "PM 回复" },
+      { idx: 4, type: "turn", at: "end" },
+    ])
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-1"))
+    await waitFor(() => expect(result.current.messages).toHaveLength(3))
+    expect(result.current.messages[1]).toMatchObject({ role: "user", text: "PM 历史" })
+    expect(raw()).toEqual({ prjA: "pm-1" })
+    expect(fake.startSessionSpy).not.toHaveBeenCalled()
+  })
+
+  it("bootstrap 无 PM 会话时自动创建（cwd=workspacePath）并写映射", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    fake.listSessionsSpy.mockResolvedValue([{ id: "s-other", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/b", title: null, live: true }])
+    fake.startSessionSpy.mockResolvedValue("pm-new")
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalledWith({ cwd: "/ws/a" }))
+    expect(raw()).toEqual({ prjA: "pm-new" })
+    expect(result.current.messages).toHaveLength(1)
+  })
+
+  it("switchProject 按映射命中切换并重放", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    fake.listSessionsSpy.mockResolvedValue([{ id: "pm-b", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/b", title: null, live: true }])
+    fake.historySpy.mockResolvedValue([{ idx: 1, type: "user-message", text: "B 项目" }])
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalled())
+    await act(async () => {
+      await result.current.switchProject("prjB", "/ws/b")
+    })
+    expect(fake.switchToSpy).toHaveBeenCalledWith("pm-b")
+    expect(raw()).toEqual({ prjA: expect.any(String), prjB: "pm-b" })
+    expect(result.current.messages[1]).toMatchObject({ role: "user", text: "B 项目" })
+  })
+
+  it("switchProject 映射失效回落 cwd 匹配并覆盖映射", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    storage.setItem("octopus.projectSessions", JSON.stringify({ prjB: "pm-dead" }))
+    fake.listSessionsSpy.mockResolvedValue([
+      { id: "pm-1", createdAt: "2026-08-28T09:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+      { id: "pm-b", createdAt: "2026-08-28T11:00:00.000Z", cwd: "/ws/b", title: null, live: true },
+    ])
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-1"))
+    await act(async () => {
+      await result.current.switchProject("prjB", "/ws/b")
+    })
+    expect(fake.switchToSpy).toHaveBeenCalledWith("pm-b")
+    expect(raw()).toEqual({ prjA: "pm-1", prjB: "pm-b" })
+  })
+
+  it("switchProject 无匹配时自动创建并写映射", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    fake.listSessionsSpy.mockResolvedValue([])
+    fake.startSessionSpy.mockResolvedValue("pm-new-b")
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalled())
+    await act(async () => {
+      await result.current.switchProject("prjB", "/ws/b", { agentPreset: "minimal" })
+    })
+    expect(fake.startSessionSpy).toHaveBeenCalledWith({ cwd: "/ws/b", agentPreset: "minimal" })
+    expect(raw()).toEqual({ prjA: expect.any(String), prjB: "pm-new-b" })
+  })
+
+  it("switchSession 切到任务会话不覆盖映射，切到 PM 会话覆盖", async () => {
+    const fake = createFakeClient()
+    const { storage, raw } = storageHarness()
+    fake.listSessionsSpy.mockResolvedValue([
+      { id: "pm-1", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+      { id: "task-x1", createdAt: "2026-08-28T11:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+      { id: "pm-2", createdAt: "2026-08-28T12:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+    ])
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", storage }),
+    )
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-2"))
+
+    await act(async () => {
+      await result.current.switchSession("task-x1")
+    })
+    expect(raw().prjA).toBe("pm-2")
+
+    await act(async () => {
+      await result.current.switchSession("pm-1")
+    })
+    expect(raw().prjA).toBe("pm-1")
   })
 })

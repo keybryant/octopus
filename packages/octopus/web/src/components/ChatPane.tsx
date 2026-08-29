@@ -13,7 +13,7 @@ import {
 } from "octopus-ui"
 import { FileText, History, Plus, Square } from "octopus-ui"
 import type { AgentClient, Artifact, PresetInfo, SessionContextInfo, SessionMeta } from "../lib/types"
-import { useChat } from "../lib/use-chat"
+import { projectSessions, useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
 import { Composer } from "./Composer"
 import { QUICK_PROMPTS } from "../lib/datasource"
@@ -21,8 +21,10 @@ import { QUICK_PROMPTS } from "../lib/datasource"
 export interface ChatPaneProps {
   /** 注入自定义 client 便于测试；null 时只读欢迎语 */
   agentClient: AgentClient | null
-  /** 新建会话的工作目录 */
-  currentCwd?: string
+  /** 当前项目 id（绑定模式下切换项目即切换该项目 PM 会话） */
+  projectId?: string
+  /** 当前项目工作区路径（PM 会话的 cwd） */
+  workspacePath?: string
   onArtifactsChange?: (artifacts: Artifact[]) => void
 }
 
@@ -49,9 +51,9 @@ function storePreset(id: string): void {
   }
 }
 
-export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPaneProps) {
-  const { messages, status, send, artifacts, pendingQuestion, decideApproval, switchSession, newSession } =
-    useChat(agentClient)
+export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsChange }: ChatPaneProps) {
+  const { messages, status, send, artifacts, pendingQuestion, decideApproval, switchSession, switchProject, newSession } =
+    useChat(agentClient, { projectId, workspacePath })
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -61,6 +63,19 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
   const [contextOpen, setContextOpen] = useState(false)
   const [contextInfo, setContextInfo] = useState<SessionContextInfo | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const boundProjectRef = useRef<string | undefined>(projectId)
+  const bound = Boolean(projectId && workspacePath)
+  const projectList = workspacePath ? projectSessions(sessions, workspacePath) : sessions
+
+  // 项目绑定：项目切换 → 解析/创建该项目 PM 会话并载入
+  useEffect(() => {
+    if (!agentClient || !projectId || !workspacePath) return
+    if (boundProjectRef.current === projectId) return
+    boundProjectRef.current = projectId
+    void switchProject(projectId, workspacePath, {
+      agentPreset: presetId && presets.length > 0 ? presetId : undefined,
+    })
+  }, [agentClient, projectId, workspacePath, presetId, presets.length, switchProject])
 
   const refreshSessions = useCallback(async () => {
     if (!agentClient) return
@@ -110,7 +125,6 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
   const handleNewSession = async () => {
     try {
       const id = await newSession({
-        cwd: currentCwd,
         agentPreset: presetId && presets.length > 0 ? presetId : undefined,
       })
       setCurrentSessionId(id)
@@ -192,12 +206,14 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-[260px]">
-                <DropdownMenuItem data-testid="session-new" onSelect={() => void handleNewSession()}>
-                  <Plus className="h-4 w-4" />
-                  新建会话
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                {sessions.map((s) => (
+                {!bound && (
+                  <DropdownMenuItem data-testid="session-new" onSelect={() => void handleNewSession()}>
+                    <Plus className="h-4 w-4" />
+                    新建会话
+                  </DropdownMenuItem>
+                )}
+                {!bound && <DropdownMenuSeparator />}
+                {projectList.map((s) => (
                   <DropdownMenuItem key={s.id} onSelect={() => handleSwitchSession(s.id)}>
                     {s.live && (
                       <span
@@ -207,6 +223,14 @@ export function ChatPane({ agentClient, currentCwd, onArtifactsChange }: ChatPan
                       />
                     )}
                     <span className="min-w-0 flex-1 truncate text-[13px]">{s.title ?? s.id}</span>
+                    {s.id.startsWith("task-") && (
+                      <span
+                        data-testid={`session-task-${s.id}`}
+                        className="shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-muted-foreground"
+                      >
+                        任务
+                      </span>
+                    )}
                     {s.id === currentSessionId && (
                       <Check data-testid={`session-current-${s.id}`} className="h-4 w-4 shrink-0 text-accent" />
                     )}

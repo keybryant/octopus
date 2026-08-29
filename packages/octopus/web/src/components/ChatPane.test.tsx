@@ -1,7 +1,7 @@
 ﻿import { act, render, screen, waitFor } from "@testing-library/react"
 import { fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import type { AgentClient, AgentStreamEvent, Artifact, SessionMeta } from "../lib/types"
 import { ChatPane } from "./ChatPane"
 
@@ -81,6 +81,10 @@ function createFakeClient(events?: ScriptedEvent[]) {
 }
 
 describe("ChatPane", () => {
+  afterEach(() => {
+    localStorage.clear()
+  })
+
   it("full flow: welcome → type & send → assistant reply appears", async () => {
     render(<ChatPane agentClient={createFakeClient().client} />)
     expect(await screen.findByText(/当前上下文/)).toBeInTheDocument()
@@ -146,10 +150,10 @@ describe("ChatPane", () => {
     expect(screen.queryByText("冲刺周计划")).not.toBeInTheDocument()
   })
 
-  it("new session calls startSession with cwd, resets chat and marks current", async () => {
+  it("legacy mode: new session calls startSession (preset only), resets chat and marks current", async () => {
     const user = userEvent.setup()
     const fake = createFakeClient()
-    render(<ChatPane agentClient={fake.client} currentCwd="C:/repo" />)
+    render(<ChatPane agentClient={fake.client} />)
     await waitFor(() => expect(screen.getByText(/当前上下文/)).toBeInTheDocument())
 
     act(() => fake.emit({ type: "user-message", text: "旧消息" }))
@@ -157,9 +161,7 @@ describe("ChatPane", () => {
 
     await user.click(screen.getByRole("button", { name: /会话/ }))
     await user.click(await screen.findByText("新建会话"))
-    await waitFor(() =>
-      expect(fake.startSessionSpy).toHaveBeenCalledWith(expect.objectContaining({ cwd: "C:/repo" })),
-    )
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByText("旧消息")).not.toBeInTheDocument())
     await waitFor(() => expect(screen.getByText(/当前上下文/)).toBeInTheDocument())
     expect(screen.queryByText("新建会话")).not.toBeInTheDocument()
@@ -167,12 +169,49 @@ describe("ChatPane", () => {
     fake.sessions.push({
       id: "s-new",
       createdAt: "2026-08-28T11:00:00.000Z",
-      cwd: "C:/repo",
+      cwd: null,
       title: "新会话",
       live: false,
     })
     await user.click(screen.getByRole("button", { name: /会话/ }))
     expect(await screen.findByTestId("session-current-s-new")).toBeInTheDocument()
+  })
+
+  it("bound mode: 隐藏新建会话，下拉仅当前项目会话且任务会话带标记", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    fake.sessions.push(
+      { id: "pm-a", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: "项目经理", live: true },
+      { id: "task-x1", createdAt: "2026-08-28T11:00:00.000Z", cwd: "/ws/a", title: "实现导出", live: true },
+      { id: "s-other", createdAt: "2026-08-28T12:00:00.000Z", cwd: "/ws/b", title: "别的项目", live: true },
+    )
+    render(<ChatPane agentClient={fake.client} projectId="prjA" workspacePath="/ws/a" />)
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-a"))
+
+    await user.click(screen.getByRole("button", { name: /会话/ }))
+    expect(await screen.findByText("项目经理")).toBeInTheDocument()
+    expect(screen.getByText("实现导出")).toBeInTheDocument()
+    expect(screen.getByTestId("session-task-task-x1")).toBeInTheDocument()
+    expect(screen.queryByText("别的项目")).not.toBeInTheDocument()
+    expect(screen.queryByText("新建会话")).not.toBeInTheDocument()
+  })
+
+  it("bound mode: 切换项目触发 switchProject 解析新项目 PM 会话", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    fake.sessions.push(
+      { id: "pm-a", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: "A 项目", live: true },
+      { id: "pm-b", createdAt: "2026-08-28T12:00:00.000Z", cwd: "/ws/b", title: "B 项目", live: true },
+    )
+    const { rerender } = render(<ChatPane agentClient={fake.client} projectId="prjA" workspacePath="/ws/a" />)
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-a"))
+
+    rerender(<ChatPane agentClient={fake.client} projectId="prjB" workspacePath="/ws/b" />)
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-b"))
+
+    await user.click(screen.getByRole("button", { name: /会话/ }))
+    expect(await screen.findByText("B 项目")).toBeInTheDocument()
+    expect(screen.queryByText("A 项目")).not.toBeInTheDocument()
   })
 
   it("approval block renders; clicking allow calls answerApproval and disables buttons", async () => {
@@ -253,18 +292,18 @@ describe("ChatPane", () => {
   it("preset switcher lists presets and new session forwards the selection", async () => {
     const user = userEvent.setup()
     const fake = createFakeClient()
-    render(<ChatPane agentClient={fake.client} currentCwd="/ws" />)
+    render(<ChatPane agentClient={fake.client} />)
     const trigger = await screen.findByTestId("preset-switcher")
     await waitFor(() => expect(fake.listPresetsSpy).toHaveBeenCalled())
 
     await user.click(trigger)
     await user.click(await screen.findByTestId("preset-option-minimal"))
-    await waitFor(() => expect(trigger).toHaveTextContent("预设：最小模式"))
+    await waitFor(() => expect(trigger.textContent).toContain("最小模式"))
 
     await user.click(screen.getByTestId("session-switcher"))
     await user.click(await screen.findByTestId("session-new"))
     await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ cwd: "/ws", agentPreset: "minimal" }),
+      expect.objectContaining({ agentPreset: "minimal" }),
     ))
   })
 })
