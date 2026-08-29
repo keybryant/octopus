@@ -33,6 +33,7 @@ export interface AgentsLike {
     sessionId: string
     meta?: { cwd?: string; agentPreset?: string }
     agentOptions?: { provider?: string; model?: string }
+    setup?(agentCtx: unknown): void | Promise<void>
   }): Promise<AgentHandleLike>
   resume(options: { resumeSessionId: string; agentOptions?: { provider?: string; model?: string } }): Promise<AgentHandleLike>
 }
@@ -79,6 +80,13 @@ export interface SessionContextInfo {
   context?: string
 }
 
+export interface AgentPersona {
+  presetId: string
+  sectionName: string
+  order: number
+  text: string
+}
+
 export interface ManagerDeps {
   agents: AgentsLike
   persistence: PersistenceLike
@@ -88,13 +96,27 @@ export interface ManagerDeps {
   provider?: string
   model?: string
   idleTtlMs: number
+  personas?: AgentPersona[]
   systemPrompt?: {
     assemble(scope: unknown): Promise<{ prompt: string; context: string }>
   }
 }
 
-export class ManagerError extends Error {
-  constructor(
+function setupForMeta(
+  meta: { cwd?: string; agentPreset?: string } | undefined,
+  personas: AgentPersona[] | undefined,
+): ((agentCtx: unknown) => Promise<void>) | undefined {
+  const persona = personas?.find((p) => p.presetId === meta?.agentPreset)
+  if (!persona) return undefined
+  return async (agentCtx: unknown) => {
+    const systemPrompt = (agentCtx as { get?(key: string): unknown })?.get?.("systemPrompt") as
+      | { section?(section: { name: string; order: number; text: string }): unknown }
+      | undefined
+    systemPrompt?.section?.({ name: persona.sectionName, order: persona.order, text: persona.text })
+  }
+}
+
+export class ManagerError extends Error {  constructor(
     readonly code: "SESSION_EXISTS" | "SESSION_NOT_FOUND" | "APPROVAL_NOT_FOUND" | "AGENT_LOOP_UNAVAILABLE",
     message: string,
   ) {
@@ -165,6 +187,7 @@ export class AgentManager {
         sessionId: id,
         meta,
         agentOptions: this.agentOptions(input.provider, input.model),
+        ...(setupForMeta(meta, this.deps.personas) !== undefined && { setup: setupForMeta(meta, this.deps.personas) }),
       })
     } catch (error) {
       throw new ManagerError("AGENT_LOOP_UNAVAILABLE", `agent create failed: ${error instanceof Error ? error.message : String(error)}`)

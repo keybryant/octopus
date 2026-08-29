@@ -4,7 +4,7 @@ import type { Context } from "@deepseek-ai/cordis"
 import { renderContextSnapshot, renderPrompt } from "@deepseek-ai/dsh-system-prompt"
 import { createAgentApi, BASE_PATH, type ApiRequest, type ApiResponse } from "./api.js"
 import { AgentManager, type AgentsLike, type PersistenceLike } from "./manager.js"
-import { ensureUserPresets } from "./presets.js"
+import { ensureUserPresets, USER_PRESETS } from "./presets.js"
 
 import type { PresetInfo } from "./types.js"
 
@@ -132,6 +132,7 @@ export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Pr
     model: config.model ?? selection?.model,
     idleTtlMs: config.idleTtlMs ?? 30 * 60 * 1000,
     systemPrompt,
+    personas: USER_PRESETS.map((p) => ({ presetId: p.id, sectionName: "deployment:persona", order: 0, text: p.persona })),
   })
   ctx.effect(() => {
     const disposeRoute = registerRoute(ctx, manager)

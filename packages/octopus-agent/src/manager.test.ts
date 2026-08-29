@@ -93,8 +93,25 @@ describe("AgentManager", () => {
     expect(callOptions.meta?.agentPreset).toBe("standard")
   })
 
-  it("sends a followup message with a stable message id", async () => {
-    const { manager, agents } = makeManager()
+  it("passes a persona setup when the preset is registered in the deps", async () => {
+    const { manager, agents } = makeManager({
+      deps: {
+        personas: [{ presetId: "octopus-designer", sectionName: "deployment:persona", order: 0, text: "You are a designer." }],
+      },
+    })
+    await manager.create({ agentPreset: "octopus-designer" })
+    const options = agents.create.mock.calls[0][0] as { setup?: (agentCtx: unknown) => Promise<void> }
+    expect(typeof options.setup).toBe("function")
+    const sectionSpy = vi.fn()
+    await options.setup!({ get: () => ({ section: sectionSpy }) })
+    expect(sectionSpy).toHaveBeenCalledWith({
+      name: "deployment:persona",
+      order: 0,
+      text: "You are a designer.",
+    })
+  })
+
+  it("sends a followup message with a stable message id", async () => {    const { manager, agents } = makeManager()
     const meta = await manager.create({})
     await manager.send(meta.id, "你好")
     const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
