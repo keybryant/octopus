@@ -1,5 +1,6 @@
 import { EventIndex } from "./events-index.js"
 import { createUserMessage } from "@deepseek-ai/dsh-llm"
+import { defineTool } from "@deepseek-ai/dsh-tools"
 import { createProjectState, deriveTitle, projectEvents, toStreamEvent, type SessionEventLike } from "./project.js"
 import type { SessionMeta } from "./types.js"
 
@@ -87,6 +88,12 @@ export interface AgentPersona {
   text: string
 }
 
+export interface AgentRole {
+  id: string
+  name: string
+  description: string
+}
+
 export interface ManagerDeps {
   agents: AgentsLike
   persistence: PersistenceLike
@@ -97,6 +104,7 @@ export interface ManagerDeps {
   model?: string
   idleTtlMs: number
   personas?: AgentPersona[]
+  roles?: AgentRole[]
   systemPrompt?: {
     assemble(scope: unknown): Promise<{ prompt: string; context: string }>
   }
@@ -104,16 +112,54 @@ export interface ManagerDeps {
 
 function setupForMeta(
   meta: { cwd?: string; agentPreset?: string } | undefined,
-  personas: AgentPersona[] | undefined,
+  deps: Pick<ManagerDeps, "personas" | "roles">,
 ): ((agentCtx: unknown) => Promise<void>) | undefined {
-  const persona = personas?.find((p) => p.presetId === meta?.agentPreset)
-  if (!persona) return undefined
-  return async (agentCtx: unknown) => {
-    const systemPrompt = (agentCtx as { get?(key: string): unknown })?.get?.("systemPrompt") as
-      | { section?(section: { name: string; order: number; text: string }): unknown }
-      | undefined
-    systemPrompt?.section?.({ name: persona.sectionName, order: persona.order, text: persona.text })
+    const persona = deps.personas?.find((p) => p.presetId === meta?.agentPreset)
+    const setup = async (agentCtx: unknown) => {
+      const host = agentCtx as { get?(key: string): unknown }
+      const systemPrompt = host?.get?.("systemPrompt") as
+        | { section?(section: { name: string; order: number; text: string }): unknown }
+        | undefined
+      if (persona) {
+        systemPrompt?.section?.({ name: persona.sectionName, order: persona.order, text: persona.text })
+      }
+      if (deps.roles && deps.roles.length > 0) {
+        const roster = deps.roles
+          .map((role) => `- ${role.name} (${role.id}): ${role.description}`)
+          .join("\n")
+        systemPrompt?.section?.({
+          name: "octopus:role-roster",
+          order: -40,
+          text:
+            "可派发的 Agent 角色如下。派发子任务时从列表中选择与任务类型匹配的角色：" +
+            "\n" +
+            roster,
+        })
+      }
+    if (deps.roles && deps.roles.length > 0) {
+      const tools = host?.get?.("tools") as { register?(definition: unknown): unknown } | undefined
+      tools?.register?.(
+        defineTool({
+          name: "list_agent_roles",
+          description:
+            "列出当前可派发任务的 Agent 角色（名称与简介）。派发任务前先调用本工具获知可用角色，再按任务类型选择最合适的角色。",
+          parameters: {},
+          output: {
+            schema: { type: "object", properties: { roles: { type: "array" } }, additionalProperties: false },
+            render: (_args: unknown, value: unknown) => [{ type: "text", text: JSON.stringify(value) }],
+          },
+          execute: async () => ({
+            roles: (deps.roles ?? []).map((role) => ({ id: role.id, name: role.name, description: role.description })),
+          }) as never,
+        } as never),
+      )
+    }
   }
+  return persona ? setup : extrasOnly(deps) ? setup : undefined
+}
+
+function extrasOnly(deps: Pick<ManagerDeps, "personas" | "roles">): boolean {
+  return Boolean(deps.roles && deps.roles.length > 0)
 }
 
 export class ManagerError extends Error {  constructor(
@@ -187,7 +233,7 @@ export class AgentManager {
         sessionId: id,
         meta,
         agentOptions: this.agentOptions(input.provider, input.model),
-        ...(setupForMeta(meta, this.deps.personas) !== undefined && { setup: setupForMeta(meta, this.deps.personas) }),
+        ...(setupForMeta(meta, this.deps) !== undefined && { setup: setupForMeta(meta, this.deps) }),
       })
     } catch (error) {
       throw new ManagerError("AGENT_LOOP_UNAVAILABLE", `agent create failed: ${error instanceof Error ? error.message : String(error)}`)

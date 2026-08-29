@@ -133,6 +133,7 @@ export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Pr
     idleTtlMs: config.idleTtlMs ?? 30 * 60 * 1000,
     systemPrompt,
     personas: USER_PRESETS.map((p) => ({ presetId: p.id, sectionName: "deployment:persona", order: 0, text: p.persona })),
+    roles: USER_PRESETS.map((p) => ({ id: p.id, name: p.name, description: p.description })),
   })
   ctx.effect(() => {
     const disposeRoute = registerRoute(ctx, manager)

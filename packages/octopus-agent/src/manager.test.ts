@@ -97,18 +97,27 @@ describe("AgentManager", () => {
     const { manager, agents } = makeManager({
       deps: {
         personas: [{ presetId: "octopus-designer", sectionName: "deployment:persona", order: 0, text: "You are a designer." }],
+        roles: [{ id: "octopus-developer", name: "开发工程师", description: "专注编码实现" }],
       },
     })
     await manager.create({ agentPreset: "octopus-designer" })
     const options = agents.create.mock.calls[0][0] as { setup?: (agentCtx: unknown) => Promise<void> }
     expect(typeof options.setup).toBe("function")
     const sectionSpy = vi.fn()
-    await options.setup!({ get: () => ({ section: sectionSpy }) })
+    const registerSpy = vi.fn()
+    await options.setup!({
+      get: (key: string) => (key === "systemPrompt" ? { section: sectionSpy } : key === "tools" ? { register: registerSpy } : undefined),
+    })
     expect(sectionSpy).toHaveBeenCalledWith({
       name: "deployment:persona",
       order: 0,
       text: "You are a designer.",
     })
+    expect(sectionSpy).toHaveBeenCalledWith(expect.objectContaining({
+      name: "octopus:role-roster",
+      text: expect.stringContaining("开发工程师"),
+    }))
+    expect(registerSpy).toHaveBeenCalledWith(expect.objectContaining({ name: "list_agent_roles" }))
   })
 
   it("sends a followup message with a stable message id", async () => {    const { manager, agents } = makeManager()
