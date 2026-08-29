@@ -26,7 +26,10 @@ export const Config = z.object({
   defaultCwd: z.string().required(false),                    // 子会话工作目录兜底
   defaultAgentPreset: z.string().default("standard"),        // 子 agent 预设
   subSessionApproval: z.union(["allow", "never"]).default("allow"),
+  askTimeoutMs: z.number().default(180_000),                 // ask_task_session 等待上限
   provider: z.string().required(false),                      // 子 agent 模型提供方
   model: z.string().required(false),                         // 子 agent 模型
 })
 ```
+
+> `provider`/`model` 未配置时沿用平台默认模型（`agentDefaultModel.currentSelection()`，即 settings.yaml 的 `agent-default-model`）。**必须保证有值**：dsh 的 persona 模板引用 `{{model}}` 变量（取自 `agent.options.model`），缺失会导致任务子会话在回合组装阶段即报错终止。

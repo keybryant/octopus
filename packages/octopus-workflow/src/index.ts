@@ -24,6 +24,10 @@ interface ToolsLike {
   register(definition: unknown): () => void
 }
 
+interface DefaultModelLike {
+  currentSelection?(): { provider?: string; model?: string } | undefined
+}
+
 /** 编排插件：主 agent 工具（需求/任务/项目/会话编排）+ 任务子会话管理 */
 export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) {
   // ctx.get 返回平台 AgentRegistry/真实 store；结构兼容断言到本地接口
@@ -33,6 +37,10 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
   const taskStore = ctx.get("taskStore") as unknown as MainToolsDeps["tasks"]
   const projectStore = ctx.get("projectStore") as unknown as MainToolsDeps["projects"]
   const persistence = ctx.get("sessionPersistence") as PersistenceLike | undefined
+  // 与 octopus-agent 一致：未显式配置时沿用平台默认模型（settings 的 agent-default-model）。
+  // dsh 的 persona 模板引用 {{model}} 变量（取 agent.options.model），缺失会导致回合在组装阶段失败。
+  const defaultModel = ctx.get("agentDefaultModel") as DefaultModelLike | undefined
+  const selection = typeof defaultModel?.currentSelection === "function" ? defaultModel.currentSelection() : undefined
 
   const manager = new TaskSessionManager({
     agents,
@@ -42,8 +50,8 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
     sessionIdFactory: createTaskSessionId,
     defaultCwd: config.defaultCwd ?? null,
     defaultAgentPreset: config.defaultAgentPreset ?? "standard",
-    provider: config.provider,
-    model: config.model,
+    provider: config.provider ?? selection?.provider,
+    model: config.model ?? selection?.model,
     approval: config.subSessionApproval ?? "allow",
     buildTaskSetup: (taskId) => buildTaskSetup({ taskStore, requirementStore }, taskId),
     ...(persistence !== undefined ? { persistence } : {}),
