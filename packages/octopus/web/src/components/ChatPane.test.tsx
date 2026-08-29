@@ -30,8 +30,8 @@ function createFakeClient(events?: ScriptedEvent[]) {
   const historySpy = vi.fn(async () => [] as AgentStreamEvent[])
   const listSessionsSpy = vi.fn(async () => [...sessions])
   const listPresetsSpy = vi.fn(async () => [
-    { id: "standard", name: "标准模式" },
-    { id: "minimal", name: "最小模式" },
+    { id: "octopus-developer", name: "开发工程师", description: "专注编码实现：读写代码、运行测试" },
+    { id: "octopus-designer", name: "设计工程师", description: "专注设计与评审：需求澄清、方案设计" },
   ])
   const getSessionContextSpy = vi.fn(async () => ({
     live: true as const,
@@ -291,7 +291,7 @@ describe("ChatPane", () => {
     expect(screen.getByText(/deepseek-official/)).toBeInTheDocument()
   })
 
-  it("preset switcher lists presets and new session forwards the selection", async () => {
+  it("preset switcher lists presets by name and description and new session forwards the selection", async () => {
     const user = userEvent.setup()
     const fake = createFakeClient()
     render(<ChatPane agentClient={fake.client} />)
@@ -299,13 +299,16 @@ describe("ChatPane", () => {
     await waitFor(() => expect(fake.listPresetsSpy).toHaveBeenCalled())
 
     await user.click(trigger)
-    await user.click(await screen.findByTestId("preset-option-minimal"))
-    await waitFor(() => expect(trigger.textContent).toContain("最小模式"))
+    const option = await screen.findByTestId("preset-option-octopus-designer")
+    expect(option).toHaveTextContent("设计工程师")
+    expect(option).toHaveTextContent("专注设计与评审")
+    await user.click(option)
+    await waitFor(() => expect(trigger).toHaveTextContent("预设：设计工程师"))
 
     await user.click(screen.getByTestId("session-switcher"))
     await user.click(await screen.findByTestId("session-new"))
     await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalledWith(
-      expect.objectContaining({ agentPreset: "minimal" }),
+      expect.objectContaining({ agentPreset: "octopus-designer" }),
     ))
   })
 })

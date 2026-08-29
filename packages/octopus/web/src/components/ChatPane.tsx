@@ -185,7 +185,7 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
                     预设：{selectedPreset?.name ?? selectedPreset?.id ?? "未设置"}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-[220px]">
+                <DropdownMenuContent align="end" className="w-[240px]">
                   {presets.map((p) => (
                     <DropdownMenuItem
                       key={p.id}
@@ -195,7 +195,12 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
                         storePreset(p.id)
                       }}
                     >
-                      <span className="min-w-0 flex-1 truncate text-[13px]">{p.name ?? p.id}</span>
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-[13px]">{p.name ?? p.id}</span>
+                        {p.description && (
+                          <span className="truncate text-[11px] text-muted-foreground">{p.description}</span>
+                        )}
+                      </span>
                       {p.id === presetId && <Check className="h-4 w-4 shrink-0 text-accent" />}
                     </DropdownMenuItem>
                   ))}

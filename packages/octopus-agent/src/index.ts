@@ -4,6 +4,7 @@ import type { Context } from "@deepseek-ai/cordis"
 import { renderContextSnapshot, renderPrompt } from "@deepseek-ai/dsh-system-prompt"
 import { createAgentApi, BASE_PATH, type ApiRequest, type ApiResponse } from "./api.js"
 import { AgentManager, type AgentsLike, type PersistenceLike } from "./manager.js"
+import { ensureUserPresets } from "./presets.js"
 
 import type { PresetInfo } from "./types.js"
 
@@ -92,6 +93,14 @@ async function resolvePresets(ctx: Context): Promise<{ items: PresetInfo[]; defa
 }
 
 export async function apply(ctx: Context, config: Partial<AgentConfig> = {}): Promise<void> {
+  const dshHomePath = ctx.get("dshHomePath") as ((...segs: string[]) => string) | undefined
+  if (typeof dshHomePath === "function") {
+    try {
+      ensureUserPresets(dshHomePath(".agent-presets"))
+    } catch (error) {
+      console.warn("[octopus-agent] user presets write failed:", error)
+    }
+  }
   if (!userQuestionsWarned) {
     userQuestionsWarned = true
     console.warn("[octopus-agent] ask_user_question bridge inactive: the web profile owns the global user-questions provider")
