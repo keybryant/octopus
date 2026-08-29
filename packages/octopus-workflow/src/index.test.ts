@@ -19,11 +19,11 @@ function makeCtx() {
 }
 
 describe("octopus-workflow index", () => {
-  it("apply 注册 14 个主工具且名字与 MAIN_TOOL_NAMES 一致", async () => {
+  it("apply 注册 16 个主工具且名字与 MAIN_TOOL_NAMES 一致", async () => {
     const { ctx, registered } = makeCtx()
     await ctx.plugin(plugin)
     expect(registered.map((t) => t.name)).toEqual([...MAIN_TOOL_NAMES])
-    expect(registered).toHaveLength(14)
+    expect(registered).toHaveLength(16)
   })
 
   it("无项目上下文（store 桩）时工具报 project-scope", async () => {

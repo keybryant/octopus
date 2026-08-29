@@ -44,6 +44,8 @@ function makeHarness() {
     stop: vi.fn(),
     send: vi.fn(),
     status: vi.fn(),
+    transcript: vi.fn(),
+    ask: vi.fn(),
   }
   const tools = createMainTools({ requirements, tasks, projects, sessions })
   const byName = (name: string) => tools.find((t) => t.name === name)!
@@ -60,9 +62,9 @@ const execNoContext = (tool: { execute(args: unknown, exec: unknown): Promise<un
   tool.execute(args, {} as never)
 
 describe("createMainTools", () => {
-  it("注册 14 个工具且 MAIN_TOOL_NAMES 一致", () => {
+  it("注册 16 个工具且 MAIN_TOOL_NAMES 一致", () => {
     const { tools } = makeHarness()
-    expect(MAIN_TOOL_NAMES).toHaveLength(14)
+    expect(MAIN_TOOL_NAMES).toHaveLength(16)
     expect(new Set(tools.map((t) => t.name))).toEqual(new Set(MAIN_TOOL_NAMES))
   })
 
@@ -142,6 +144,44 @@ describe("createMainTools", () => {
     expect(h.sessions.send).toHaveBeenCalledWith("TASK-2800", "继续")
     await exec(h.byName("task_session_status"), { taskId: "TASK-2800" })
     expect(h.sessions.status).toHaveBeenCalledWith("TASK-2800")
+  })
+
+  it("ask_task_session / task_session_log 委托 sessions（含分页与超时默认值）", async () => {
+    const h = makeHarness()
+    const { sessions } = h
+    ;(sessions.ask as ReturnType<typeof vi.fn>).mockResolvedValue({ reply: "已改完，测试通过", events: [{ type: "assistant-text", text: "已改完，测试通过" }] })
+    ;(sessions.transcript as ReturnType<typeof vi.fn>).mockResolvedValue({ events: [{ type: "user-message", text: "开工" }], total: 1 })
+
+    const asked = await exec(h.byName("ask_task_session"), { taskId: "TASK-2800", message: "进展如何？" })
+    expect(sessions.ask).toHaveBeenCalledWith("TASK-2800", "进展如何？", 180_000)
+    expect(asked).toMatchObject({ reply: expect.stringContaining("已改完") })
+
+    const askedCustom = await exec(h.byName("ask_task_session"), { taskId: "TASK-2800", message: "hi", timeoutMs: 5000 })
+    expect(sessions.ask).toHaveBeenCalledWith("TASK-2800", "hi", 5000)
+
+    const log = await exec(h.byName("task_session_log"), { taskId: "TASK-2800", after: 5, limit: 20 })
+    expect(sessions.transcript).toHaveBeenCalledWith("TASK-2800", { after: 5, limit: 20 })
+    expect(log).toMatchObject({ total: 1 })
+  })
+
+  it("列表工具 render 携带详细记录（模型可见完整数据而非计数）", () => {
+    const h = makeHarness()
+    h.tasks.list = vi.fn(() => [makeTask(), { ...makeTask(), id: "TASK-2801", title: "联调测试", status: "doing", agentSessionId: "task-AAAA1111", agentSummary: "已完成" }])
+    h.requirements.list = vi.fn(() => [makeRequirement()])
+    const renderText = (tool: { output: { render(args: unknown, value: unknown): { text: string }[] } }, value: unknown): string =>
+      tool.output.render({}, value).map((b) => b.text).join("\n")
+
+    const tasksText = renderText(h.byName("list_tasks"), h.tasks.list())
+    expect(tasksText).toContain("TASK-2800 | 实现导出 | todo")
+    expect(tasksText).toContain("TASK-2801 | 联调测试 | doing")
+    expect(tasksText).toContain("task-AAAA1111")
+    expect(tasksText).toContain("已完成")
+
+    const reqsText = renderText(h.byName("list_requirements"), h.requirements.list())
+    expect(reqsText).toContain("REQ-100 | 导出报表 | planned | P1")
+
+    const taskText = renderText(h.byName("get_task"), makeTask({ agentSessionId: "task-AAAA1111" }))
+    expect(taskText).toContain("session=task-AAAA1111")
   })
 
   it("toolError 包装错误码", () => {

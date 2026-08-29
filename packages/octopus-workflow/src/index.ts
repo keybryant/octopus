@@ -1,6 +1,6 @@
 import z from "@deepseek-ai/schemastery"
 import type { Context } from "@deepseek-ai/cordis"
-import { TaskSessionManager, createTaskSessionId, type AgentsLike } from "./manager.js"
+import { TaskSessionManager, createTaskSessionId, type AgentsLike, type PersistenceLike } from "./manager.js"
 import { createMainTools, type MainToolsDeps } from "./tools.js"
 import { buildTaskSetup } from "./sub-tools.js"
 
@@ -12,6 +12,8 @@ export const Config = z.object({
   defaultAgentPreset: z.string().default("standard"),
   /** 子会话审批策略：allow=自动放行（默认，无头执行）；never=确定性拒绝（只读审计模式） */
   subSessionApproval: z.union(["allow", "never"]).default("allow"),
+  /** ask_task_session 默认等待上限（毫秒） */
+  askTimeoutMs: z.number().default(180_000),
   provider: z.string().required(false),
   model: z.string().required(false),
 })
@@ -30,6 +32,7 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
   const requirementStore = ctx.get("requirementStore") as unknown as MainToolsDeps["requirements"]
   const taskStore = ctx.get("taskStore") as unknown as MainToolsDeps["tasks"]
   const projectStore = ctx.get("projectStore") as unknown as MainToolsDeps["projects"]
+  const persistence = ctx.get("sessionPersistence") as PersistenceLike | undefined
 
   const manager = new TaskSessionManager({
     agents,
@@ -43,6 +46,7 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
     model: config.model,
     approval: config.subSessionApproval ?? "allow",
     buildTaskSetup: (taskId) => buildTaskSetup({ taskStore, requirementStore }, taskId),
+    ...(persistence !== undefined ? { persistence } : {}),
   })
 
   ctx.effect(() => {
@@ -51,6 +55,7 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
       tasks: taskStore,
       projects: projectStore,
       sessions: manager,
+      askTimeoutMs: config.askTimeoutMs,
     }).map((definition) => tools.register(definition))
     return () => {
       for (const dispose of disposers) dispose()

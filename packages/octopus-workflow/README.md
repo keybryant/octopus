@@ -4,8 +4,10 @@ Agent 编排服务插件：主 agent 会话（工作台聊天）通过 14 个工
 
 ## 能力
 
-- **主会话工具**（14 个，注入 `ctx.tools`）：需求（`create_requirement` / `list_requirements` / `get_requirement` / `update_requirement`）、项目（`list_projects` / `get_project`）、任务（`list_tasks` / `get_task` / `create_tasks` / `update_task`）、会话编排（`start_task_session` / `send_to_task_session` / `task_session_status` / `stop_task_session`）
+- **主会话工具**（16 个，注入 `ctx.tools`）：需求（`create_requirement` / `list_requirements` / `get_requirement` / `update_requirement`）、项目（`list_projects` / `get_project`）、任务（`list_tasks` / `get_task` / `create_tasks` / `update_task`）、会话编排（`start_task_session` / `send_to_task_session` / `task_session_status` / `stop_task_session` / `ask_task_session` / `task_session_log`）
 - **项目作用域**：主会话工具从调用会话的 cwd（=项目工作区）推导当前项目——PM agent 只能查看/操作当前项目的数据（跨项目访问返回 `project-scope` 错误），`list_projects` 仅返回当前项目
+- **详细输出**：所有列表/查询工具的模型可见输出（render）携带完整记录（id/标题/状态/优先级/描述/会话/总结），非仅计数
+- **与子 agent 对话**：`ask_task_session` 提问并阻塞等待该轮回复全文（超时 `askTimeoutMs`，默认 180s，可逐次传 `timeoutMs`）；`task_session_log` 分页读取完整执行记录（live 取内存日志，非 live 经 `sessionPersistence` 重建）
 - **任务子会话**：`TaskSessionManager` 为任务创建/恢复真实 AgentLoop 子会话（工作目录=项目工作区），任务自动置「进行中」；子 agent 完成后经 `report_task_status` 提交评审
 - **作用域工具**：子会话注入 `get_task_context` / `report_task_status`，并按 restrict mask 收敛可用工具集
 - **事件跟踪**：会话/代理/审批事件投影到环形缓冲，`task_session_status` 返回最近 15 条摘要

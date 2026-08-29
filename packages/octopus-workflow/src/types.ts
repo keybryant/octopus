@@ -41,6 +41,8 @@ export interface TaskSessionLike {
   stop(taskId: string): Promise<TaskRecord>
   send(taskId: string, message: string): Promise<void>
   status(taskId: string): Promise<TaskSessionStatus>
+  transcript(taskId: string, opts?: { after?: number; limit?: number }): Promise<{ events: TaskSessionEvent[]; total: number }>
+  ask(taskId: string, message: string, timeoutMs: number): Promise<{ reply: string; events: TaskSessionEvent[] }>
 }
 
 export interface TaskSessionStatus {
@@ -63,6 +65,7 @@ export type WorkflowErrorCode =
   | "project-scope"
   | "session-unavailable"
   | "not-found"
+  | "timeout"
   | "invalid-input"
 
 export class WorkflowError extends Error {

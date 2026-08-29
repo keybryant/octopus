@@ -7,10 +7,12 @@ import {
   taskListSchema,
   taskObjectSchema,
 } from "./schemas.js"
-import type { ProjectStoreLike, RequirementStoreLike, TaskSessionLike, TaskStoreLike } from "./types.js"
+import type { ProjectStoreLike, RequirementStoreLike, TaskSessionEvent, TaskSessionLike, TaskStoreLike } from "./types.js"
 import type { TaskPatch } from "./types.js"
 import { WorkflowError } from "./types.js"
 import type { ProjectView } from "octopus-projects"
+import type { RequirementRecord } from "octopus-requirements"
+import type { TaskRecord } from "octopus-tasks"
 
 export const MAIN_TOOL_NAMES = [
   "create_requirement",
@@ -27,6 +29,8 @@ export const MAIN_TOOL_NAMES = [
   "send_to_task_session",
   "task_session_status",
   "stop_task_session",
+  "ask_task_session",
+  "task_session_log",
 ] as const
 
 /** 把带 code 的错误包装为模型可读的 `[code] message` 文本 */
@@ -38,16 +42,18 @@ export function toolError(error: unknown): never {
 
 export interface MainToolsDeps {
   requirements: RequirementStoreLike & {
-    list?(filter?: (record: import("octopus-requirements").RequirementRecord) => boolean): import("octopus-requirements").RequirementRecord[]
-    create?(input: { title: string; projectId: string; description?: string; priority?: "P0" | "P1" | "P2"; source: "chat" }): Promise<import("octopus-requirements").RequirementRecord>
-    update?(id: string, patch: { title?: string; description?: string; priority?: "P0" | "P1" | "P2"; status?: string }): Promise<import("octopus-requirements").RequirementRecord>
+    list?(filter?: (record: RequirementRecord) => boolean): RequirementRecord[]
+    create?(input: { title: string; projectId: string; description?: string; priority?: "P0" | "P1" | "P2"; source: "chat" }): Promise<RequirementRecord>
+    update?(id: string, patch: { title?: string; description?: string; priority?: "P0" | "P1" | "P2"; status?: string }): Promise<RequirementRecord>
   }
   tasks: TaskStoreLike & {
-    list?(filter?: (record: import("octopus-tasks").TaskRecord) => boolean): import("octopus-tasks").TaskRecord[]
-    createBatch?(input: { requirementId: string; projectId: string; tasks: { title: string; description?: string }[] }): Promise<import("octopus-tasks").TaskRecord[]>
+    list?(filter?: (record: TaskRecord) => boolean): TaskRecord[]
+    createBatch?(input: { requirementId: string; projectId: string; tasks: { title: string; description?: string }[] }): Promise<TaskRecord[]>
   }
   projects: ProjectStoreLike & { list?(): ProjectView[] }
   sessions: TaskSessionLike
+  /** ask_task_session 默认等待上限（毫秒） */
+  askTimeoutMs?: number
 }
 
 /**
@@ -79,8 +85,71 @@ function guardProject(recordProjectId: string, current: ProjectView): void {
   }
 }
 
+// ── 模型可见的详细渲染（dsh 工具结果 = render 输出，必须携带完整数据）──
+
+const clamp = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s)
+
+const formatRequirement = (r: RequirementRecord): string =>
+  `${r.id} | ${r.title} | ${r.status} | ${r.priority}${r.description ? ` | ${clamp(r.description, 120)}` : ""}`
+
+const formatTask = (t: TaskRecord): string =>
+  `${t.id} | ${t.title} | ${t.status}${t.agentSessionId ? ` | session=${t.agentSessionId}` : ""}${t.agentSummary ? ` | 总结=${clamp(t.agentSummary, 120)}` : ""}`
+
+const formatProject = (p: ProjectView): string => `${p.id} | ${p.name} | ${p.status} | ${p.workspacePath}`
+
+function formatEvent(e: TaskSessionEvent): string {
+  switch (e.type) {
+    case "status":
+      return `[状态] ${e.status}`
+    case "user-message":
+      return `[用户] ${e.text}`
+    case "assistant-text":
+      return `[助手] ${e.text}`
+    case "tool-call":
+      return `[工具调用] ${e.name}(${e.summary})`
+    case "tool-result":
+      return `[工具结果] ${e.name} ${e.ok ? "成功" : "失败"}: ${e.preview}`
+    case "turn":
+      return `[回合${e.at === "start" ? "开始" : "结束"}${e.reason !== undefined ? ` ${e.reason}` : ""}]`
+    case "error":
+      return `[错误] ${e.message}`
+  }
+}
+
+function formatEvents(events: TaskSessionEvent[], max = 30): string {
+  const tail = events.slice(Math.max(0, events.length - max))
+  const lines = tail.map(formatEvent)
+  if (events.length > max) lines.unshift(`…（共 ${events.length} 条，显示最后 ${max} 条）`)
+  return lines.join("\n")
+}
+
+function formatList<T>(items: T[], formatter: (item: T) => string, label: string, max = 30): string {
+  const shown = items.slice(0, max)
+  const lines = shown.map(formatter)
+  if (items.length > max) lines.push(`…（共 ${items.length} 条，显示前 ${max} 条）`)
+  return `${label}（${items.length} 条）：\n${lines.join("\n")}`
+}
+
+/** TaskSessionEvent 的 JSON-schema 输出描述（status / log / ask 共用） */
+const eventItemSchema = {
+  type: "object", additionalProperties: false,
+  properties: {
+    type: { type: "string", required: true },
+    text: { type: "string" },
+    name: { type: "string" },
+    status: { type: "string" },
+    message: { type: "string" },
+    summary: { type: "string" },
+    preview: { type: "string" },
+    ok: { type: "boolean" },
+    at: { type: "string" },
+    reason: { type: "string" },
+  },
+} as const
+
 export function createMainTools(deps: MainToolsDeps) {
   const { requirements, tasks, projects, sessions } = deps
+  const askTimeoutMs = deps.askTimeoutMs ?? 180_000
   const text = (s: string) => [{ type: "text" as const, text: s }]
   const guardTask = (id: string, current: ProjectView): void => {
     const record = tasks.get(id)
@@ -104,7 +173,7 @@ export function createMainTools(deps: MainToolsDeps) {
       },
       output: {
         schema: requirementObjectSchema,
-        render: (_args, value) => text(`created requirement ${value.id}: ${value.title}`),
+        render: (_args, value) => text(`created requirement ${formatRequirement(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -123,14 +192,14 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "list_requirements",
-      description: "查询当前项目的需求列表，可按状态/优先级过滤。",
+      description: "查询当前项目的需求列表（返回每条需求的 id/标题/状态/优先级/描述），可按状态/优先级过滤。",
       parameters: {
         status: { type: "string", enum: ["backlog", "planned", "in-progress", "review", "done"], description: "状态过滤。" },
         priority: { type: "string", enum: ["P0", "P1", "P2"], description: "优先级过滤。" },
       },
       output: {
         schema: requirementListSchema,
-        render: (_args, value) => text(`found ${value.length} requirements`),
+        render: (_args, value) => text(formatList(value, formatRequirement, "需求列表")),
       },
       async execute(args, exec) {
         try {
@@ -147,11 +216,11 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "get_requirement",
-      description: "按 id 查询当前项目的单条需求。",
+      description: "按 id 查询当前项目的单条需求（含完整描述）。",
       parameters: { id: { type: "string", required: true, description: "需求 id，如 REQ-100。" } },
       output: {
         schema: requirementObjectSchema,
-        render: (_args, value) => text(`requirement ${value.id}: ${value.title}`),
+        render: (_args, value) => text(`requirement ${formatRequirement(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -175,7 +244,7 @@ export function createMainTools(deps: MainToolsDeps) {
       },
       output: {
         schema: requirementObjectSchema,
-        render: (_args, value) => text(`updated requirement ${value.id}: ${value.status}`),
+        render: (_args, value) => text(`updated requirement ${formatRequirement(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -198,7 +267,7 @@ export function createMainTools(deps: MainToolsDeps) {
       parameters: {},
       output: {
         schema: projectListSchema,
-        render: (_args, value) => text(`current project: ${value[0]?.id}`),
+        render: (_args, value) => text(`当前项目：\n${formatProject(value[0])}`),
       },
       async execute(_args, exec) {
         try {
@@ -223,7 +292,7 @@ export function createMainTools(deps: MainToolsDeps) {
       parameters: { id: { type: "string", required: true, description: "项目 id。" } },
       output: {
         schema: projectObjectSchema,
-        render: (_args, value) => text(`project ${value.id}: ${value.name}`),
+        render: (_args, value) => text(`project ${formatProject(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -239,14 +308,14 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "list_tasks",
-      description: "查询当前项目的任务列表，可按需求/状态过滤。",
+      description: "查询当前项目的任务列表（返回每条任务的 id/标题/状态/所属需求/会话/总结），可按需求/状态过滤。",
       parameters: {
         requirementId: { type: "string", description: "需求 id 过滤。" },
         status: { type: "string", enum: ["todo", "doing", "review", "done"], description: "状态过滤。" },
       },
       output: {
         schema: taskListSchema,
-        render: (_args, value) => text(`found ${value.length} tasks`),
+        render: (_args, value) => text(formatList(value, formatTask, "任务列表")),
       },
       async execute(args, exec) {
         try {
@@ -263,11 +332,11 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "get_task",
-      description: "按 id 查询当前项目的单条任务（含 agentSessionId/agentSummary）。",
+      description: "按 id 查询当前项目的单条任务（含 agentSessionId/agentSummary 完整字段）。",
       parameters: { id: { type: "string", required: true, description: "任务 id，如 TASK-2800。" } },
       output: {
         schema: taskObjectSchema,
-        render: (_args, value) => text(`task ${value.id}: ${value.title} [${value.status}]`),
+        render: (_args, value) => text(`task ${formatTask(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -297,7 +366,7 @@ export function createMainTools(deps: MainToolsDeps) {
       },
       output: {
         schema: taskListSchema,
-        render: (_args, value) => text(`created ${value.length} tasks`),
+        render: (_args, value) => text(formatList(value, formatTask, "已创建任务")),
       },
       async execute(args, exec) {
         try {
@@ -324,7 +393,7 @@ export function createMainTools(deps: MainToolsDeps) {
       },
       output: {
         schema: taskObjectSchema,
-        render: (_args, value) => text(`updated task ${value.id}: ${value.status}`),
+        render: (_args, value) => text(`updated task ${formatTask(value)}`),
       },
       async execute(args, exec) {
         try {
@@ -352,7 +421,7 @@ export function createMainTools(deps: MainToolsDeps) {
             task: { ...taskObjectSchema, required: true },
           },
         },
-        render: (_args, value) => text(`task session started: ${value.sessionId}`),
+        render: (_args, value) => text(`task session started: ${value.sessionId}\n${formatTask(value.task)}`),
       },
       async execute(args, exec) {
         try {
@@ -366,7 +435,7 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "send_to_task_session",
-      description: "向当前项目的任务子会话追加指令/追问（不创建新会话；会话会立即响应）。",
+      description: "向当前项目的任务子会话追加指令/追问（不等待回复；需要读取回复用 ask_task_session）。",
       parameters: {
         taskId: { type: "string", required: true, description: "任务 id。" },
         message: { type: "string", required: true, description: "要发送的消息。" },
@@ -388,7 +457,7 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "task_session_status",
-      description: "查询当前项目任务的执行情况：任务状态、会话 live/status、最近事件摘要（最后 15 条）与 agentSummary。用于跟踪进度与汇报。",
+      description: "查询当前项目任务的执行情况：任务状态、会话 live/status、最近事件摘要（含消息全文）与 agentSummary。用于跟踪进度与汇报。",
       parameters: { taskId: { type: "string", required: true, description: "任务 id。" } },
       output: {
         schema: {
@@ -403,24 +472,14 @@ export function createMainTools(deps: MainToolsDeps) {
                 status: { type: "string", enum: ["idle", "running"] },
               },
             },
-            events: {
-              type: "array", required: true,
-              items: { type: "object", additionalProperties: false, properties: {
-                type: { type: "string", required: true },
-                text: { type: "string" },
-                name: { type: "string" },
-                status: { type: "string" },
-                message: { type: "string" },
-                summary: { type: "string" },
-                preview: { type: "string" },
-                ok: { type: "boolean" },
-                at: { type: "string" },
-                reason: { type: "string" },
-              } },
-            },
+            events: { type: "array", required: true, items: eventItemSchema },
           },
         },
-        render: (_args, value) => text(`task ${value.task.id}: ${value.task.status}; session ${value.session.live ? value.session.status ?? "running" : "offline"}; ${value.events.length} recent events`),
+        render: (_args, value) => text(
+          `task ${formatTask(value.task)}\n`
+          + `session: live=${value.session.live} status=${value.session.status ?? "-"} id=${value.session.sessionId ?? "-"}\n`
+          + `recent events:\n${formatEvents(value.events as TaskSessionEvent[])}`,
+        ),
       },
       async execute(args, exec) {
         try {
@@ -438,13 +497,71 @@ export function createMainTools(deps: MainToolsDeps) {
       parameters: { taskId: { type: "string", required: true, description: "任务 id。" } },
       output: {
         schema: taskObjectSchema,
-        render: (_args, value) => text(`stopped task session for ${value.id}`),
+        render: (_args, value) => text(`stopped task session for ${formatTask(value)}`),
       },
       async execute(args, exec) {
         try {
           const current = requireCurrentProject(exec, projects)
           guardTask(args.taskId, current)
           return await sessions.stop(args.taskId)
+        } catch (error) {
+          throw toolError(error)
+        }
+      },
+    }),
+    defineTool({
+      name: "ask_task_session",
+      description: "向当前项目的任务子会话提问并等待其回复全文（阻塞直到该轮回复结束；子 agent 可能边调工具边作答）。用于与执行 agent 对话、追问细节、收集结果。",
+      parameters: {
+        taskId: { type: "string", required: true, description: "任务 id。" },
+        message: { type: "string", required: true, description: "要问的问题/指令。" },
+        timeoutMs: { type: "integer", description: `等待上限毫秒（缺省 ${askTimeoutMs}）。` },
+      },
+      output: {
+        schema: {
+          type: "object", additionalProperties: false,
+          properties: {
+            reply: { type: "string", required: true },
+            events: { type: "array", required: true, items: eventItemSchema },
+          },
+        },
+        render: (_args, value) => text(`子 agent 回复：\n${value.reply}${value.events.length > 0 ? `\n\n--- 该轮事件 ---\n${formatEvents(value.events as TaskSessionEvent[])}` : ""}`),
+      },
+      async execute(args, exec) {
+        try {
+          const current = requireCurrentProject(exec, projects)
+          guardTask(args.taskId, current)
+          return await sessions.ask(args.taskId, args.message, args.timeoutMs ?? askTimeoutMs)
+        } catch (error) {
+          throw toolError(error)
+        }
+      },
+    }),
+    defineTool({
+      name: "task_session_log",
+      description: "读取当前项目任务子会话的完整执行记录：用户/助手消息全文、工具调用与结果（分页：after 起始条数、limit 单页上限）。非 live 会话自动从持久化历史重建。",
+      parameters: {
+        taskId: { type: "string", required: true, description: "任务 id。" },
+        after: { type: "integer", description: "起始条数（默认 0）。" },
+        limit: { type: "integer", description: "单页条数（默认 100，最大 500）。" },
+      },
+      output: {
+        schema: {
+          type: "object", additionalProperties: false,
+          properties: {
+            total: { type: "integer", required: true },
+            events: { type: "array", required: true, items: eventItemSchema },
+          },
+        },
+        render: (_args, value) => text(
+          `执行记录（共 ${value.total} 条，返回 ${value.events.length} 条）：\n${(value.events as TaskSessionEvent[]).map(formatEvent).join("\n")}`,
+        ),
+      },
+      async execute(args, exec) {
+        try {
+          const current = requireCurrentProject(exec, projects)
+          guardTask(args.taskId, current)
+          return await sessions.transcript(args.taskId, { after: args.after, limit: args.limit })
         } catch (error) {
           throw toolError(error)
         }

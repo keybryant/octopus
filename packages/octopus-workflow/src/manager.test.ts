@@ -47,7 +47,11 @@ const makeProject = (): ProjectView => ({
   workspacePath: "C:/projects/alpha", workspaceId: "ws-1", createdAt: "2026-08-26T00:00:00.000Z",
 })
 
-function makeHarness(opts: { approval?: "allow" | "never"; createGate?: () => Promise<void> } = {}) {
+function makeHarness(opts: {
+  approval?: "allow" | "never"
+  createGate?: () => Promise<void>
+  persistence?: { load: (id: string) => Promise<{ meta: { cwd: unknown; createdAt: unknown }; events: unknown[] }> }
+} = {}) {
   const tasks = new Map<string, TaskRecord>()
   const taskStore = {
     get: (id: string) => tasks.get(id),
@@ -104,6 +108,7 @@ function makeHarness(opts: { approval?: "allow" | "never"; createGate?: () => Pr
     model: undefined,
     approval: opts.approval ?? "allow",
     buildTaskSetup: () => () => {},
+    ...(opts.persistence !== undefined ? { persistence: opts.persistence } : {}),
   })
   return { manager, agents, taskStore, tasks }
 }
@@ -305,5 +310,106 @@ describe("TaskSessionManager", () => {
   it("createTaskSessionId 生成 task- 前缀 8 位 id", () => {
     const id = createTaskSessionId()
     expect(id).toMatch(/^task-[A-Z2-7]{8}$/)
+  })
+
+  it("transcript 返回 live 会话全量事件（分页 after/limit + total）", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const started = await h.manager.start("TASK-2800")
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    const agent = handle.agent as ReturnType<typeof fakeAgent>
+    agent.emit("agent/status", { status: "running" })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 1, type: "user/message", data: { text: "开工" } })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 2, type: "assistant/message", data: { message: { content: [{ type: "text", text: "完成导出模块" }] } } })
+    const page = await h.manager.transcript("TASK-2800", { after: 0, limit: 2 })
+    expect(page.total).toBe(3)
+    expect(page.events).toEqual([
+      { type: "status", status: "running" },
+      { type: "user-message", text: "开工" },
+    ])
+    const rest = await h.manager.transcript("TASK-2800", { after: 2, limit: 10 })
+    expect(rest.events).toEqual([{ type: "assistant-text", text: "完成导出模块" }])
+  })
+
+  it("transcript 对非 live 会话从持久化历史重建（projection）", async () => {
+    const persistence = {
+      load: vi.fn(async () => ({
+        meta: { cwd: "C:/projects/alpha", createdAt: 1 },
+        events: [
+          { seq: 1, type: "user/message", data: { text: "旧指令" } },
+          { seq: 2, type: "assistant/message", data: { message: { content: [{ type: "text", text: "旧回复" }] } } },
+        ],
+      })),
+    }
+    const harness2 = makeHarness({ persistence })
+    harness2.tasks.set("TASK-2800", makeTask({ agentSessionId: "task-AAAA1111", status: "doing" }))
+    const page = await harness2.manager.transcript("TASK-2800")
+    expect(persistence.load).toHaveBeenCalledWith("task-AAAA1111")
+    expect(page.events).toEqual([
+      { type: "user-message", text: "旧指令" },
+      { type: "assistant-text", text: "旧回复" },
+    ])
+    expect(harness2.agents.resume).not.toHaveBeenCalled()
+  })
+
+  it("transcript 无会话且无持久化 → session-unavailable", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    await expect(h.manager.transcript("TASK-2800")).rejects.toMatchObject({ code: "session-unavailable" })
+  })
+
+  it("ask 发送消息并事件驱动等待 turn end，返回该轮完整回复", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const started = await h.manager.start("TASK-2800")
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    const agent = handle.agent as ReturnType<typeof fakeAgent>
+
+    const promise = h.manager.ask("TASK-2800", "进展如何？", 5000)
+    const followupCalls = (handle.agent.followup as ReturnType<typeof vi.fn>).mock.calls.length
+    expect(followupCalls).toBeGreaterThan(1)
+    // 模拟子 agent 回复（turn start → 文本 → turn end）
+    agent.emit("session/event", { id: started.sessionId }, { seq: 3, type: "user/message", data: { text: "进展如何？" } })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 4, type: "turn/start", data: {} })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 5, type: "assistant/message", data: { message: { content: [{ type: "text", text: "已改完导出模块，正在跑测试。" }] } } })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 6, type: "turn/end", data: { reason: { kind: "completed" } } })
+
+    const result = await promise
+    expect(result.reply).toContain("已改完导出模块")
+    expect(result.events.map((e) => e.type)).toContain("assistant-text")
+  })
+
+  it("ask 超时抛 timeout 错误", async () => {
+    vi.useFakeTimers()
+    try {
+      const h = makeHarness()
+      h.tasks.set("TASK-2800", makeTask())
+      await h.manager.start("TASK-2800")
+      const promise = h.manager.ask("TASK-2800", "在吗？", 1000)
+      const assertion = expect(promise).rejects.toMatchObject({ code: "timeout" })
+      await vi.advanceTimersByTimeAsync(1500)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("ask 对未加载会话自动 resume 后发送", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask({ agentSessionId: "task-AAAA1111", status: "doing" }))
+    const promise = h.manager.ask("TASK-2800", "继续", 5000)
+    expect(h.agents.resume).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: "task-AAAA1111" }))
+    // 等待 entry 就绪（resume 完成并挂上监听）后再模拟回复，避免竞态丢事件
+    await vi.waitFor(async () => {
+      const st = await h.manager.status("TASK-2800")
+      expect(st.session.live).toBe(true)
+    })
+    const handle = (await h.agents.resume.mock.results[0].value) as AgentHandleLike
+    const agent = handle.agent as ReturnType<typeof fakeAgent>
+    agent.emit("session/event", { id: "task-AAAA1111" }, { seq: 1, type: "turn/start", data: {} })
+    agent.emit("session/event", { id: "task-AAAA1111" }, { seq: 2, type: "assistant/message", data: { message: { content: [{ type: "text", text: "好" }] } } })
+    agent.emit("session/event", { id: "task-AAAA1111" }, { seq: 3, type: "turn/end", data: {} })
+    const result = await promise
+    expect(result.reply).toBe("好")
   })
 })

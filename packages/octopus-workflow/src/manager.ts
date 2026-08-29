@@ -55,6 +55,10 @@ export interface AgentsLike {
   }): Promise<AgentHandleLike>
 }
 
+export interface PersistenceLike {
+  load(id: string): Promise<{ meta: { cwd: unknown; createdAt: unknown }; events: SessionEventLike[] }>
+}
+
 export interface ManagerDeps {
   agents: AgentsLike
   taskStore: TaskStoreLike
@@ -67,6 +71,8 @@ export interface ManagerDeps {
   model?: string
   approval: "allow" | "never"
   buildTaskSetup: (taskId: string) => (agentCtx: AgentCtxLike) => void
+  /** 可选：会话持久化读取（非 live 会话的 transcript 重建用） */
+  persistence?: PersistenceLike
 }
 
 interface Entry {
@@ -74,6 +80,8 @@ interface Entry {
   sessionId: string
   handle: AgentHandleLike
   events: TaskSessionEvent[]
+  /** 全量事件日志（transcript 数据源；上限 LOG_MAX，超出裁剪头部） */
+  log: TaskSessionEvent[]
   lastActivityMs: number
   /** agent/status 事件驱动的实时状态（初始化自 handle.agent.status，随后由监听器更新） */
   status: "idle" | "running"
@@ -89,6 +97,15 @@ interface ResumeInflight {
   promise: Promise<Entry>
 }
 
+interface AskWaiter {
+  from: number
+  resolve: (events: TaskSessionEvent[]) => void
+  timer: ReturnType<typeof setTimeout>
+}
+
+/** 全量事件日志上限（超出裁剪头部，防止长会话内存失控） */
+export const LOG_MAX = 5000
+
 /** 任务子会话编排：创建/恢复/停止/追问/状态 + 事件环形缓冲 + 审批策略 */
 export class TaskSessionManager {
   private entries = new Map<string, Entry>()
@@ -96,6 +113,8 @@ export class TaskSessionManager {
   private starting = new Map<string, StartInflight>()
   /** send 懒恢复进行中去抖：并发 send 复用同一 Promise，防双 resume */
   private resuming = new Map<string, ResumeInflight>()
+  /** ask 等待者：turn/end 到达时按 taskId 解析 */
+  private askWaiters = new Map<string, AskWaiter>()
   private currentNow = (): number => Date.now()
 
   constructor(private deps: ManagerDeps) {}
@@ -173,7 +192,7 @@ export class TaskSessionManager {
       await handle.dispose().catch(() => {})
       return { sessionId, task: this.deps.taskStore.get(taskId) ?? task }
     }
-    const entry: Entry = { taskId, sessionId, handle, events: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
+    const entry: Entry = { taskId, sessionId, handle, events: [], log: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
     this.entries.set(taskId, entry)
     this.listenLive(taskId, entry, handle)
     if (fresh) this.kick(taskId, handle)
@@ -193,8 +212,19 @@ export class TaskSessionManager {
       await entry.handle.dispose().catch(() => {})
       this.entries.delete(taskId)
     }
+    this.settleAsk(taskId)
     await this.deps.taskStore.attachSession(taskId, null)
     return this.deps.taskStore.reopen(taskId)
+  }
+
+  /** 释放 ask 等待者（stop/withdraw 时以已有内容结算，避免悬挂） */
+  private settleAsk(taskId: string): void {
+    const waiter = this.askWaiters.get(taskId)
+    if (!waiter) return
+    this.askWaiters.delete(taskId)
+    clearTimeout(waiter.timer)
+    const entry = this.entries.get(taskId)
+    waiter.resolve(entry ? entry.log.slice(waiter.from) : [])
   }
 
   async send(taskId: string, message: string): Promise<void> {
@@ -223,9 +253,74 @@ export class TaskSessionManager {
     }
   }
 
+  /**
+   * 读取任务子会话全量事件记录（分页）。live 会话取内存日志；非 live 但有
+   * agentSessionId 时经 persistence 重建（同 octopus-agent 的 history 语义）。
+   */
+  async transcript(
+    taskId: string,
+    opts: { after?: number; limit?: number } = {},
+  ): Promise<{ events: TaskSessionEvent[]; total: number }> {
+    const task = this.deps.taskStore.get(taskId)
+    if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
+    const entry = this.entries.get(taskId)
+    if (entry) {
+      const after = Math.max(0, opts.after ?? 0)
+      const limit = Math.max(1, Math.min(opts.limit ?? 100, 500))
+      return { events: entry.log.slice(after, after + limit), total: entry.log.length }
+    }
+    const sessionId = task.agentSessionId
+    if (!sessionId || !this.deps.persistence) {
+      throw new WorkflowError("session-unavailable", `task ${taskId} session is not live and has no persisted history`)
+    }
+    const history = await this.deps.persistence.load(sessionId)
+    const st = createProjectState()
+    const log = history.events.flatMap((raw) => projectEvents(st, raw))
+    const after = Math.max(0, opts.after ?? 0)
+    const limit = Math.max(1, Math.min(opts.limit ?? 100, 500))
+    return { events: log.slice(after, after + limit), total: log.length }
+  }
+
+  /**
+   * 向任务子会话提问并等待其回复（事件驱动：turn/end 到达即返回该轮全部新事件）。
+   * 超时抛 WorkflowError("timeout")。
+   */
+  async ask(taskId: string, message: string, timeoutMs: number): Promise<{ reply: string; events: TaskSessionEvent[] }> {
+    const task = this.deps.taskStore.get(taskId)
+    if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
+    if (!task.agentSessionId) {
+      throw new WorkflowError("session-unavailable", `task ${taskId} has no agent session`)
+    }
+    const entry = this.entries.get(taskId) ?? await this.loadResumed(taskId, task.agentSessionId)
+    if (this.askWaiters.has(taskId)) {
+      throw new WorkflowError("invalid-input", `task ${taskId} already has a pending question`)
+    }
+    const from = entry.log.length
+    entry.handle.agent.followup(createUserMessage({ content: [{ type: "text", text: message }], source: { kind: "user" } }))
+    entry.lastActivityMs = this.currentNow()
+    const events = await new Promise<TaskSessionEvent[]>((resolve) => {
+      const timer = setTimeout(() => {
+        this.askWaiters.delete(taskId)
+        resolve(entry.log.slice(from))
+      }, timeoutMs)
+      this.askWaiters.set(taskId, { from, resolve, timer })
+    })
+    if (events.length === 0) {
+      throw new WorkflowError("timeout", `task ${taskId} did not reply within ${timeoutMs}ms`)
+    }
+    const reply = events
+      .filter((e) => e.type === "assistant-text")
+      .map((e) => (e as { text: string }).text)
+      .join("\n")
+    return { reply, events }
+  }
+
   async withdraw(): Promise<void> {
     for (const entry of [...this.entries.values()]) {
       await entry.handle.dispose().catch(() => {})
+    }
+    for (const taskId of [...this.askWaiters.keys()]) {
+      this.settleAsk(taskId)
     }
     this.entries.clear()
     this.starting.clear()
@@ -268,7 +363,7 @@ export class TaskSessionManager {
       await handle.dispose().catch(() => {})
       throw new WorkflowError("session-unavailable", `task ${taskId} session resume superseded by stop`)
     }
-    const entry: Entry = { taskId, sessionId, handle, events: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
+    const entry: Entry = { taskId, sessionId, handle, events: [], log: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
     this.entries.set(taskId, entry)
     this.listenLive(taskId, entry, handle)
     return entry
@@ -300,7 +395,16 @@ export class TaskSessionManager {
     const st = createProjectState()
     const push = (event: TaskSessionEvent): void => {
       entry.events = appendEvent(entry.events, event)
+      entry.log = appendEvent(entry.log, event, LOG_MAX)
       entry.lastActivityMs = this.currentNow()
+      if (event.type === "turn" && event.at === "end") {
+        const waiter = this.askWaiters.get(taskId)
+        if (waiter) {
+          this.askWaiters.delete(taskId)
+          clearTimeout(waiter.timer)
+          waiter.resolve(entry.log.slice(waiter.from))
+        }
+      }
     }
     agent.ctx.on("session/event", (session, event) => {
       if ((session as { id?: string } | undefined)?.id !== entry.sessionId) return
