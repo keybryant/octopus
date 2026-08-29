@@ -322,12 +322,14 @@ export function useChat(
       const target = resolvePmSession(sessions, workspacePath, store.get(projectId))
       if (target) {
         store.set(projectId, target.id)
+        if (seq !== projectSeqRef.current) return
         await c.switchTo(target.id)
         const events = await c.history(target.id)
         if (seq !== projectSeqRef.current) return
         setState(events.reduce(reduceEvent, initialState(labelRef.current)))
         return
       }
+      if (seq !== projectSeqRef.current) return
       const id = await c.startSession({ cwd: workspacePath, ...sessionOpts })
       if (seq !== projectSeqRef.current) return
       store.set(projectId, id)

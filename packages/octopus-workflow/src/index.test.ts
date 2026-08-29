@@ -26,11 +26,11 @@ describe("octopus-workflow index", () => {
     expect(registered).toHaveLength(14)
   })
 
-  it("store 缺失时 start_task_session 工具报 task-not-found", async () => {
+  it("无项目上下文（store 桩）时工具报 project-scope", async () => {
     const { ctx, registered } = makeCtx()
     await ctx.plugin(plugin)
     const start = registered.find((t) => t.name === "start_task_session") as unknown as
       { execute(args: { taskId: string }, exec: unknown): Promise<unknown> }
-    await expect(start.execute({ taskId: "TASK-9999" }, {} as never)).rejects.toThrow(/task-not-found/)
+    await expect(start.execute({ taskId: "TASK-9999" }, {} as never)).rejects.toThrow(/project-scope/)
   })
 })

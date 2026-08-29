@@ -57,7 +57,13 @@ export interface AgentCtxLike {
   }
 }
 
-export type WorkflowErrorCode = "task-not-found" | "project-not-found" | "session-unavailable" | "invalid-input" | "not-found"
+export type WorkflowErrorCode =
+  | "task-not-found"
+  | "project-not-found"
+  | "project-scope"
+  | "session-unavailable"
+  | "not-found"
+  | "invalid-input"
 
 export class WorkflowError extends Error {
   constructor(

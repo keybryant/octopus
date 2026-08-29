@@ -187,6 +187,8 @@ describe("ChatPane", () => {
     )
     render(<ChatPane agentClient={fake.client} projectId="prjA" workspacePath="/ws/a" />)
     await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-a"))
+    // 聊天头显示当前工作区
+    expect(await screen.findByTestId("chat-workspace")).toHaveTextContent("/ws/a")
 
     await user.click(screen.getByRole("button", { name: /会话/ }))
     expect(await screen.findByText("项目经理")).toBeInTheDocument()

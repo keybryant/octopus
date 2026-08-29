@@ -145,9 +145,18 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
         <div className="mx-auto max-w-[820px] space-y-5 px-6 pb-2 pt-6">
           {/* 会话头 */}
           <div className="flex items-center justify-between pb-1">
-            <div className="flex items-center gap-2 text-xs text-text-faint">
-              <History className="h-3.5 w-3.5" />
-              {sessionHeader()}
+            <div className="flex min-w-0 items-center gap-2 text-xs text-text-faint">
+              <History className="h-3.5 w-3.5 shrink-0" />
+              <span className="shrink-0">{sessionHeader()}</span>
+              {workspacePath && (
+                <span
+                  data-testid="chat-workspace"
+                  title="当前工作区（PM 会话 cwd）"
+                  className="mono truncate rounded-full border border-border px-2 py-px text-[10.5px] text-muted-foreground"
+                >
+                  {workspacePath}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1.5">
               <Button
