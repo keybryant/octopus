@@ -1,5 +1,7 @@
 import z from "@deepseek-ai/schemastery"
 import type { Context } from "@deepseek-ai/cordis"
+import { TASK_STATUS_CHANGED_EVENT, type TaskRecord } from "octopus-tasks"
+import { MONITOR_HALT_EVENT, type AgentMonitorHaltEvent } from "octopus-agent-monitor"
 import { TaskSessionManager, createTaskSessionId, type AgentsLike, type PersistenceLike } from "./manager.js"
 import { createMainTools, type MainToolsDeps } from "./tools.js"
 import { buildTaskSetup } from "./sub-tools.js"
@@ -41,6 +43,10 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
   // dsh 的 persona 模板引用 {{model}} 变量（取 agent.options.model），缺失会导致回合在组装阶段失败。
   const defaultModel = ctx.get("agentDefaultModel") as DefaultModelLike | undefined
   const selection = typeof defaultModel?.currentSelection === "function" ? defaultModel.currentSelection() : undefined
+  // 按预设取模型覆盖（octopus-agent 提供；懒读取避免插件加载顺序耦合）
+  const presetModelService = (): { get?(id: string): { provider?: string; model?: string } | undefined } => {
+    return (ctx.get("agentPresetModels") ?? {}) as { get?(id: string): { provider?: string; model?: string } | undefined }
+  }
 
   const manager = new TaskSessionManager({
     agents,
@@ -52,6 +58,7 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
     defaultAgentPreset: config.defaultAgentPreset ?? "standard",
     provider: config.provider ?? selection?.provider,
     model: config.model ?? selection?.model,
+    presetModels: (presetId) => presetModelService().get?.(presetId),
     approval: config.subSessionApproval ?? "allow",
     buildTaskSetup: (taskId) => buildTaskSetup({ taskStore, requirementStore }, taskId),
     ...(persistence !== undefined ? { persistence } : {}),
@@ -65,7 +72,20 @@ export async function apply(ctx: Context, config: Partial<WorkflowConfig> = {}) 
       sessions: manager,
       askTimeoutMs: config.askTimeoutMs,
     }).map((definition) => tools.register(definition))
+    // 事件驱动派发：任务变为执行中（doing）即为该任务创建新会话并启动对应智能体执行
+    const offStatusChanged = ctx.on(TASK_STATUS_CHANGED_EVENT, (record: TaskRecord) => {
+      if (record.status !== "doing") return
+      void manager.start(record.id).catch((error) => {
+        console.warn(`[octopus-workflow] auto-start failed for task ${record.id}:`, error)
+      })
+    })
+    // 监控停机事件：任务子会话超限 → 回退 todo 等待用户重新派发
+    const offMonitorHalted = ctx.on(MONITOR_HALT_EVENT, (payload: AgentMonitorHaltEvent) => {
+      manager.handleMonitorHalted(payload)
+    })
     return () => {
+      offStatusChanged()
+      offMonitorHalted()
       for (const dispose of disposers) dispose()
       void manager.withdraw()
     }

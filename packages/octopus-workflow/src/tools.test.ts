@@ -62,9 +62,10 @@ const execNoContext = (tool: { execute(args: unknown, exec: unknown): Promise<un
   tool.execute(args, {} as never)
 
 describe("createMainTools", () => {
-  it("注册 16 个工具且 MAIN_TOOL_NAMES 一致", () => {
+  it("注册 15 个工具且 MAIN_TOOL_NAMES 一致（不含 start_task_session）", () => {
     const { tools } = makeHarness()
-    expect(MAIN_TOOL_NAMES).toHaveLength(16)
+    expect(MAIN_TOOL_NAMES).toHaveLength(15)
+    expect(MAIN_TOOL_NAMES).not.toContain("start_task_session")
     expect(new Set(tools.map((t) => t.name))).toEqual(new Set(MAIN_TOOL_NAMES))
   })
 
@@ -92,9 +93,13 @@ describe("createMainTools", () => {
     h.tasks.createBatch = batch
     await exec(h.byName("create_tasks"), {
       requirementId: "REQ-100",
-      tasks: [{ title: "实现导出" }, { title: "联调测试" }],
+      tasks: [{ title: "实现导出", agent: "octopus-developer" }, { title: "联调测试" }],
     })
-    expect(batch).toHaveBeenCalledWith({ requirementId: "REQ-100", projectId: "prjA", tasks: [{ title: "实现导出" }, { title: "联调测试" }] })
+    expect(batch).toHaveBeenCalledWith({
+      requirementId: "REQ-100",
+      projectId: "prjA",
+      tasks: [{ title: "实现导出", agent: "octopus-developer" }, { title: "联调测试" }],
+    })
   })
 
   it("list_projects 只返回当前项目；get_project 拒绝其他项目", async () => {
@@ -116,7 +121,7 @@ describe("createMainTools", () => {
     const h = makeHarness()
     h.tasks.get = vi.fn(() => makeTask({ id: "TASK-2800", projectId: "prjB" }))
     await expect(exec(h.byName("get_task"), { id: "TASK-2800" })).rejects.toThrow(/project-scope/)
-    await expect(exec(h.byName("start_task_session"), { taskId: "TASK-2800" })).rejects.toThrow(/project-scope/)
+    await expect(exec(h.byName("task_session_status"), { taskId: "TASK-2800" })).rejects.toThrow(/project-scope/)
     h.requirements.get = vi.fn(() => ({ ...makeRequirement(), projectId: "prjB" }))
     await expect(exec(h.byName("update_requirement"), { id: "REQ-100", status: "planned" })).rejects.toThrow(/project-scope/)
   })
@@ -134,10 +139,8 @@ describe("createMainTools", () => {
     await expect(exec(h.byName("update_task"), { id: "TASK-2800", status: "done" })).rejects.toThrow(/\[invalid-input\] boom/)
   })
 
-  it("start_task_session / stop / send / status 委托 sessions", async () => {
+  it("stop / send / status 委托 sessions", async () => {
     const h = makeHarness()
-    await exec(h.byName("start_task_session"), { taskId: "TASK-2800" })
-    expect(h.sessions.start).toHaveBeenCalledWith("TASK-2800")
     await exec(h.byName("stop_task_session"), { taskId: "TASK-2800" })
     expect(h.sessions.stop).toHaveBeenCalledWith("TASK-2800")
     await exec(h.byName("send_to_task_session"), { taskId: "TASK-2800", message: "继续" })

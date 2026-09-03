@@ -26,6 +26,7 @@ export const taskFields = {
   requirementId: { type: "string", required: true },
   projectId: { type: "string", required: true },
   status: { type: "string", required: true, enum: ["todo", "doing", "review", "done"] },
+  agent: { type: "string" },
   agentSessionId: { type: "string" },
   agentSummary: { type: "string" },
   createdAt: { type: "string", required: true },

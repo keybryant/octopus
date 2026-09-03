@@ -150,8 +150,8 @@ workbench.example.com {
 主 agent 会话（工作台聊天）可直接操作需求/任务/项目域，并为任务拉起独立子会话执行：
 
 1. **创建需求**：聊天中让 agent 调用 `create_requirement`（项目 id 用 `list_projects` 查询）
-2. **拆解任务**：agent 读取需求（`get_requirement`）后在对话内拆解，经 `create_tasks` 批量保存
-3. **子会话执行**：`start_task_session` 为任务创建真实 AgentLoop 子会话（工作目录=项目工作区），任务自动置「进行中」；子 agent 完成后经 `report_task_status` 提交评审
+2. **拆解任务**：agent 读取需求（`get_requirement`）后在对话内拆解，经 `create_tasks` 批量保存，并为每条任务指定执行的智能体（`agent` 字段，可选；用 `list_agent_roles` 查看可用角色）
+3. **事件驱动派发**：PM agent 不直接启动子会话。将任务状态置为 doing（`update_task`）即触发 `octopus-tasks` 的任务状态变更事件，octopus-workflow 监听该事件为任务**新建**独立执行会话（工作目录=项目工作区；每次派发都新建会话，不复用旧会话）并驱动指定智能体开工；子 agent 完成后经 `report_task_status` 提交评审
 4. **跟踪**：`task_session_status` 查询任务状态与最近事件摘要；`send_to_task_session` 追问；`stop_task_session` 停止并回退待处理
 
 任务子会话为真实 dsh 会话，可在聊天面板会话列表打开观看；任务卡显示 agent 会话徽章与完成摘要。

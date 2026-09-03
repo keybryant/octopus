@@ -282,6 +282,8 @@ export function useChat(
     projectId?: string
     workspacePath?: string
     storage?: Pick<Storage, "getItem" | "setItem"> | null
+    /** 绑定/切换会话后回传该会话的 agent 预设（无预设时回传 null），供上层同步预设选择器 */
+    onPresetChange?: (preset: string | null) => void
   },
 ): {
   messages: ChatMessage[]
@@ -311,6 +313,8 @@ export function useChat(
   )
   const projectSeqRef = useRef(0)
   const bootstrapped = useRef(false)
+  const presetChangeRef = useRef(opts?.onPresetChange)
+  presetChangeRef.current = opts?.onPresetChange
 
   /** 解析/创建项目 PM 会话并载入（绑定核心） */
   const bindProject = useCallback(async (projectId: string, workspacePath: string, sessionOpts?: { agentPreset?: string }) => {
@@ -327,6 +331,7 @@ export function useChat(
         const events = await c.history(target.id)
         if (seq !== projectSeqRef.current) return
         setState(events.reduce(reduceEvent, initialState(labelRef.current)))
+        presetChangeRef.current?.(target.agentPreset ?? null)
         return
       }
       if (seq !== projectSeqRef.current) return
@@ -334,6 +339,7 @@ export function useChat(
       if (seq !== projectSeqRef.current) return
       store.set(projectId, id)
       setState(initialState(labelRef.current))
+      presetChangeRef.current?.(sessionOpts?.agentPreset ?? null)
     } catch {
       /* 保持当前状态 */
     }
@@ -406,15 +412,16 @@ export function useChat(
     const events = await c.history(id)
     const next = events.reduce(reduceEvent, initialState(labelRef.current))
     setState(next)
-    // 手动切换：若目标是当前项目的 PM 会话（非任务会话），更新映射为新的活动会话
-    const { projectId, workspacePath } = projectRef.current
-    if (!projectId || !workspacePath) return
     try {
       const list = await c.listSessions()
       const meta = list.find((s) => s.id === id)
-      if (meta && meta.cwd === workspacePath && !isTaskSession(meta)) {
+      const { projectId, workspacePath } = projectRef.current
+      // 手动切换：若目标是当前项目的 PM 会话（非任务会话），更新映射为新的活动会话
+      if (projectId && workspacePath && meta && meta.cwd === workspacePath && !isTaskSession(meta)) {
         store.set(projectId, id)
       }
+      // 同步预设选择器到目标会话的 agent 预设
+      presetChangeRef.current?.(meta?.agentPreset ?? null)
     } catch {
       /* 忽略 */
     }

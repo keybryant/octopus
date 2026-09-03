@@ -3,7 +3,7 @@ import { createAgentApi, BASE_PATH, type IndexLike, type ApiRequest, type ApiRes
 import { ManagerError } from "./manager.js"
 import type { AgentStreamEvent, SessionMeta } from "./types.js"
 
-const meta: SessionMeta = { id: "oct-AAAAAAA1", createdAt: "2026-08-28T00:00:00.000Z", cwd: "/x", title: null, live: true }
+const meta: SessionMeta = { id: "oct-AAAAAAA1", createdAt: "2026-08-28T00:00:00.000Z", cwd: "/x", title: null, live: true, agentPreset: "octopus-pm" }
 
 type StatusLike = { live: boolean; status?: "idle" | "running"; pendingApprovalId?: string }
 
@@ -17,6 +17,8 @@ interface StubManager {
   cancel: Mock<(id: string) => Promise<void>>
   dispose: Mock<(id: string) => Promise<void>>
   answerApproval: Mock<(id: string, approvalId: string, decision: "allow" | "deny") => Promise<void>>
+  presetModelOf: Mock<(presetId: string) => { provider?: string; model?: string } | undefined>
+  setPresetModel: Mock<(presetId: string, spec: { provider?: string; model?: string }) => void>
 }
 
 const DEFAULT_PRESETS = { items: [{ id: "standard", name: "鏍囧噯妯″紡" }], defaultId: "standard" as string | null }
@@ -81,6 +83,8 @@ function makeStub(overrides: Partial<StubManager> = {}) {
     cancel: vi.fn(async () => {}),
     dispose: vi.fn(async () => {}),
     answerApproval: vi.fn(async () => {}),
+    presetModelOf: vi.fn(() => undefined),
+    setPresetModel: vi.fn(),
     ...overrides,
   }
   return {
@@ -112,6 +116,32 @@ describe("octopus-agent api", () => {
     expect(res.code()).toBe(200)
     expect(JSON.parse(res.text())).toEqual(DEFAULT_PRESETS)
     expect(stub.listPresets).toHaveBeenCalledOnce()
+  })
+  it("sets a preset model via PUT and trims blank fields to unset", async () => {
+    const stub = makeStub()
+    const handler = createAgentApi(depsOf(stub))
+    const res = fakeRes()
+    await handler(
+      fakeReq("PUT", `${BASE_PATH}/presets/octopus-developer/model`, { provider: "  ", model: "deepseek-v4-flash" }).req,
+      res.res,
+    )
+    expect(res.code()).toBe(200)
+    expect(stub.manager.setPresetModel).toHaveBeenCalledWith("octopus-developer", {
+      provider: undefined,
+      model: "deepseek-v4-flash",
+    })
+  })
+  it("rejects unknown preset ids with 404", async () => {
+    const stub = makeStub({
+      setPresetModel: vi.fn(() => {
+        throw new ManagerError("PRESET_NOT_FOUND", "preset nope not found")
+      }),
+    })
+    const handler = createAgentApi(depsOf(stub))
+    const res = fakeRes()
+    await handler(fakeReq("PUT", `${BASE_PATH}/presets/nope/model`, { model: "x" }).req, res.res)
+    expect(res.code()).toBe(404)
+    expect(JSON.parse(res.text())).toMatchObject({ error: "preset nope not found" })
   })
   it("returns live session context", async () => {
     const stub = makeStub()
@@ -169,7 +199,7 @@ describe("octopus-agent api", () => {
     await handler(fakeReq("GET", `${BASE_PATH}/sessions/oct-AAAAAAA1/history`).req, res.res)
     expect(res.code()).toBe(200)
     const body = JSON.parse(res.text()) as { session: SessionMeta; events: AgentStreamEvent[]; lastIdx: number }
-    expect(body.session).toMatchObject({ id: "oct-AAAAAAA1", live: true })
+      expect(body.session).toMatchObject({ id: "oct-AAAAAAA1", live: true, agentPreset: "octopus-pm" })
     expect(body.events).toHaveLength(2)
     expect(body.events[0]).toMatchObject({ idx: 0, type: "user-message", text: "hi" })
     expect(body.lastIdx).toBe(1)

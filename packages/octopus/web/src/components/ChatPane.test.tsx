@@ -33,6 +33,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     { id: "octopus-developer", name: "开发工程师", description: "专注编码实现：读写代码、运行测试" },
     { id: "octopus-designer", name: "设计工程师", description: "专注设计与评审：需求澄清、方案设计" },
   ])
+  const savePresetModelSpy = vi.fn(async () => undefined)
   const getSessionContextSpy = vi.fn(async () => ({
     live: true as const,
     provider: "deepseek-official",
@@ -58,6 +59,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     answerApproval: answerApprovalSpy,
     reply: vi.fn(async () => ({ blocks: [] })),
     listPresets: listPresetsSpy,
+    savePresetModel: savePresetModelSpy,
     getSessionContext: getSessionContextSpy,
   }
   const emit = (ev: ScriptedEvent): void => {
@@ -77,6 +79,7 @@ function createFakeClient(events?: ScriptedEvent[]) {
     listSessionsSpy,
     listPresetsSpy,
     getSessionContextSpy,
+    savePresetModelSpy,
   }
 }
 
@@ -148,6 +151,23 @@ describe("ChatPane", () => {
     await waitFor(() => expect(screen.queryByText("手工消息")).not.toBeInTheDocument())
     expect(await screen.findByText(/当前上下文/)).toBeInTheDocument()
     expect(screen.queryByText("冲刺周计划")).not.toBeInTheDocument()
+  })
+
+  it("切换会话时预设选择器同步为目标会话的 agentPreset", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    fake.sessions.push(
+      { id: "s-pm", createdAt: "2026-08-28T10:00:00.000Z", cwd: "C:/work", title: "PM 会话", live: true, agentPreset: "octopus-designer" },
+      { id: "s-dev", createdAt: "2026-08-28T11:00:00.000Z", cwd: "C:/work", title: "开发会话", live: true, agentPreset: "octopus-developer" },
+    )
+    render(<ChatPane agentClient={fake.client} />)
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("s-dev"))
+    await waitFor(() => expect(screen.getByTestId("preset-switcher")).toHaveTextContent(/开发工程师/))
+
+    await user.click(screen.getByRole("button", { name: /会话/ }))
+    await user.click(await screen.findByText("PM 会话"))
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("s-pm"))
+    await waitFor(() => expect(screen.getByTestId("preset-switcher")).toHaveTextContent(/设计工程师/))
   })
 
   it("legacy mode: new session calls startSession (preset only), resets chat and marks current", async () => {
@@ -310,5 +330,39 @@ describe("ChatPane", () => {
     await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalledWith(
       expect.objectContaining({ agentPreset: "octopus-designer" }),
     ))
+  })
+
+  it("preset model settings saves provider/model and refreshes preset list", async () => {
+    const user = userEvent.setup()
+    const fake = createFakeClient()
+    render(<ChatPane agentClient={fake.client} />)
+    const trigger = await screen.findByTestId("preset-switcher")
+    await waitFor(() => expect(fake.listPresetsSpy).toHaveBeenCalled())
+
+    await user.click(trigger)
+    await user.click(await screen.findByTestId("preset-model-settings"))
+
+    await user.clear(screen.getByTestId("preset-model-input"))
+    await user.type(screen.getByTestId("preset-model-input"), "deepseek-reasoner")
+    await user.clear(screen.getByTestId("preset-provider-input"))
+    await user.type(screen.getByTestId("preset-provider-input"), "deepseek-official")
+    await user.click(screen.getByTestId("preset-model-save"))
+
+    await waitFor(() => expect(fake.savePresetModelSpy).toHaveBeenCalledWith(
+      "octopus-developer",
+      { provider: "deepseek-official", model: "deepseek-reasoner" },
+    ))
+    await waitFor(() => expect(fake.listPresetsSpy.mock.calls.length).toBeGreaterThan(1))
+  })
+
+  it("preset dropdown shows per-agent model when set", async () => {
+    const listPresetsSpy = vi.fn(async () => [
+      { id: "octopus-developer", name: "开发工程师", description: "编码", model: "deepseek-v4-flash" },
+    ])
+    const client = { ...createFakeClient().client, listPresets: listPresetsSpy }
+    const user = userEvent.setup()
+    render(<ChatPane agentClient={client} />)
+    await user.click(await screen.findByTestId("preset-switcher"))
+    expect(await screen.findByTestId("preset-model-octopus-developer")).toHaveTextContent("deepseek-v4-flash")
   })
 })

@@ -92,6 +92,7 @@ export interface AgentClient {
   disposeSession(): Promise<void>
   answerApproval(id: string, decision: "allow" | "deny"): Promise<void>
   listPresets(): Promise<PresetInfo[]>
+  savePresetModel(presetId: string, spec: PresetModelSpec): Promise<void>
   getSessionContext(sessionId: string): Promise<SessionContextInfo>
   reply(input: string): Promise<AgentReply>
 }
@@ -114,12 +115,21 @@ export interface SessionMeta {
   cwd: string | null
   title: string | null
   live: boolean
+  agentPreset?: string
 }
 
 export interface PresetInfo {
   id: string
   name?: string
   description?: string
+  /** 该智能体预设单独指定的模型（未指定时用平台默认） */
+  provider?: string
+  model?: string
+}
+
+export interface PresetModelSpec {
+  provider?: string
+  model?: string
 }
 
 export interface SessionContextInfo {

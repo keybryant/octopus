@@ -5,6 +5,7 @@ import type {
   Artifact,
   MessageBlock,
   PresetInfo,
+  PresetModelSpec,
   SessionContextInfo,
   SessionMeta,
 } from "./types"
@@ -170,6 +171,7 @@ export function createMockAgentClient(delayMs = 600): AgentClient {
         { id: "minimal", name: "最小模式" },
       ]
     },
+    async savePresetModel(): Promise<void> {},
     async getSessionContext(): Promise<SessionContextInfo> {
       return { live: true, provider: "mock", model: "mock-flash", prompt: "mock system prompt", context: "mock runtime context" }
     },
@@ -302,6 +304,7 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
       const body = (await res.json()) as { session?: SessionMeta }
       if (!body.session) throw new Error("startSession: no session in response")
       sessionId = body.session.id
+      lastIdx = -1
       openStream()
       return body.session.id
     },
@@ -341,6 +344,14 @@ export function createHttpAgentClient(baseUrl = "/api/octopus-agent"): AgentClie
       const res = await fetch(`${baseUrl}/presets`)
       const body = (await res.json()) as { items?: PresetInfo[] }
       return body.items ?? []
+    },
+    async savePresetModel(presetId: string, spec: PresetModelSpec): Promise<void> {
+      const res = await fetch(`${baseUrl}/presets/${presetId}/model`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider: spec.provider, model: spec.model }),
+      })
+      if (!res.ok) throw new Error("savePresetModel: request failed")
     },
     async getSessionContext(targetSessionId: string): Promise<SessionContextInfo> {
       const res = await fetch(`${baseUrl}/sessions/${targetSessionId}/context`)

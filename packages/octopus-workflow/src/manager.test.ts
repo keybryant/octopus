@@ -50,6 +50,9 @@ const makeProject = (): ProjectView => ({
 function makeHarness(opts: {
   approval?: "allow" | "never"
   createGate?: () => Promise<void>
+  provider?: string
+  model?: string
+  presetModels?: (presetId: string) => { provider?: string; model?: string } | undefined
   persistence?: { load: (id: string) => Promise<{ meta: { cwd: unknown; createdAt: unknown }; events: unknown[] }> }
 } = {}) {
   const tasks = new Map<string, TaskRecord>()
@@ -104,8 +107,9 @@ function makeHarness(opts: {
     sessionIdFactory: () => `task-${String(++seq).padStart(8, "A")}`,
     defaultCwd: null,
     defaultAgentPreset: "standard",
-    provider: undefined,
-    model: undefined,
+    provider: opts.provider,
+    model: opts.model,
+    ...(opts.presetModels !== undefined ? { presetModels: opts.presetModels } : {}),
     approval: opts.approval ?? "allow",
     buildTaskSetup: () => () => {},
     ...(opts.persistence !== undefined ? { persistence: opts.persistence } : {}),
@@ -144,17 +148,54 @@ describe("TaskSessionManager", () => {
     expect(h.agents.resume).not.toHaveBeenCalled()
   })
 
-  it("start 对已有 agentSessionId 的任务走 resume，不 kick", async () => {
+  it("start 每次派发都新建会话：已有 agentSessionId 的任务也重建并重新 kick", async () => {
     const h = makeHarness()
     h.tasks.set("TASK-2800", makeTask({ agentSessionId: "task-AAAA1111", status: "doing" }))
     const result = await h.manager.start("TASK-2800")
-    expect(result.sessionId).toBe("task-AAAA1111")
-    expect(h.agents.create).not.toHaveBeenCalled()
-    expect(h.agents.resume).toHaveBeenCalledWith(expect.objectContaining({
-      resumeSessionId: "task-AAAA1111",
+    expect(result.sessionId).not.toBe("task-AAAA1111")
+    expect(h.agents.create).toHaveBeenCalledTimes(1)
+    expect(h.agents.resume).not.toHaveBeenCalled()
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toBe(result.sessionId)
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    expect(handle.agent.followup).toHaveBeenCalledWith(expect.objectContaining({
+      content: expect.arrayContaining([expect.objectContaining({
+        text: expect.stringContaining("实现导出"),
+      })]),
     }))
-    const handle = (await h.agents.resume.mock.results[0].value) as AgentHandleLike
-    expect(handle.agent.followup).not.toHaveBeenCalled()
+  })
+
+  it("start 使用任务指定 agent 预设（缺省回退默认预设）", async () => {
+    const h = makeHarness({ model: "global-default" })
+    h.tasks.set("TASK-2800", makeTask({ agent: "octopus-developer" }))
+    await h.manager.start("TASK-2800")
+    expect(h.agents.create).toHaveBeenCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ agentPreset: "octopus-developer", taskId: "TASK-2800" }),
+    }))
+
+    h.tasks.set("TASK-2801", makeTask({ id: "TASK-2801", title: "B" }))
+    await h.manager.start("TASK-2801")
+    expect(h.agents.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ agentPreset: "standard" }),
+    }))
+  })
+
+  it("start 按任务 agent 预设取模型覆盖（缺省回退全局默认）", async () => {
+    const h = makeHarness({
+      model: "global-default",
+      presetModels: (presetId) =>
+        presetId === "octopus-developer" ? { provider: "p-a", model: "model-a" } : undefined,
+    })
+    h.tasks.set("TASK-2800", makeTask({ agent: "octopus-developer" }))
+    await h.manager.start("TASK-2800")
+    expect(h.agents.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentOptions: { provider: "p-a", model: "model-a" },
+    }))
+
+    h.tasks.set("TASK-2801", makeTask({ id: "TASK-2801", title: "B" }))
+    await h.manager.start("TASK-2801")
+    expect(h.agents.create).toHaveBeenLastCalledWith(expect.objectContaining({
+      agentOptions: { model: "global-default" },
+    }))
   })
 
   it("start 未知任务抛 task-not-found", async () => {
@@ -203,11 +244,11 @@ describe("TaskSessionManager", () => {
     expect(before.session).toEqual({ sessionId: "task-AAAA1111", live: false, status: undefined })
     expect(h.agents.resume).not.toHaveBeenCalled()
 
-    await h.manager.start("TASK-2800")
-    const handle = (await h.agents.resume.mock.results[0].value) as AgentHandleLike
+    const started = await h.manager.start("TASK-2800")
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
     const agent = handle.agent as ReturnType<typeof fakeAgent>
     agent.emit("agent/status", { status: "running" })
-    agent.emit("session/event", { id: "task-AAAA1111" }, { seq: 1, type: "user/message", data: { text: "开始干活" } })
+    agent.emit("session/event", { id: started.sessionId }, { seq: 1, type: "user/message", data: { text: "开始干活" } })
     const after = await h.manager.status("TASK-2800")
     expect(after.session.live).toBe(true)
     expect(after.session.status).toBe("running")
@@ -411,5 +452,40 @@ describe("TaskSessionManager", () => {
     agent.emit("session/event", { id: "task-AAAA1111" }, { seq: 3, type: "turn/end", data: {} })
     const result = await promise
     expect(result.reply).toBe("好")
+  })
+
+  it("monitor halt 将任务回退 todo、解除会话并记录停机事件", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    const started = await h.manager.start("TASK-2800")
+    const handle = (await h.agents.create.mock.results[0].value) as AgentHandleLike
+    h.manager.handleMonitorHalted({
+      sessionId: started.sessionId,
+      reason: "tokens",
+      used: 120,
+      limit: 100,
+      message: "已消耗 120 tokens，达到限额 100",
+    })
+    const st = await h.manager.status("TASK-2800")
+    expect(st.events).toContainEqual({ type: "monitor-halt", reason: "tokens", message: "已消耗 120 tokens，达到限额 100" })
+    await vi.waitFor(async () => {
+      expect(h.tasks.get("TASK-2800")?.status).toBe("todo")
+    })
+    expect(h.tasks.get("TASK-2800")?.agentSessionId).toBeUndefined()
+    expect(handle.agent.cancel).toHaveBeenCalled()
+  })
+
+  it("monitor halt 对未知会话为空操作", async () => {
+    const h = makeHarness()
+    h.tasks.set("TASK-2800", makeTask())
+    await h.manager.start("TASK-2800")
+    h.manager.handleMonitorHalted({
+      sessionId: "task-NOSUCH",
+      reason: "turns",
+      used: 5,
+      limit: 5,
+      message: "已完成 5 轮，达到轮数限额 5",
+    })
+    expect(h.tasks.get("TASK-2800")?.status).toBe("doing")
   })
 })

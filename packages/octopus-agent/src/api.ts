@@ -37,6 +37,8 @@ export interface ApiDeps {
     cancel(id: string): Promise<void>
     dispose(id: string): Promise<void>
     answerApproval(id: string, approvalId: string, decision: "allow" | "deny"): Promise<void>
+    presetModelOf(presetId: string): { provider?: string; model?: string } | undefined
+    setPresetModel(presetId: string, spec: { provider?: string; model?: string }): void
   }
 }
 
@@ -94,6 +96,7 @@ function toError(error: unknown): { status: number; message: string } {
     const statuses: Record<ManagerError["code"], number> = {
       SESSION_NOT_FOUND: 404,
       APPROVAL_NOT_FOUND: 404,
+      PRESET_NOT_FOUND: 404,
       AGENT_LOOP_UNAVAILABLE: 503,
       SESSION_EXISTS: 409,
     }
@@ -124,6 +127,14 @@ export function createAgentApi(deps: ApiDeps): (req: ApiRequest, res: ApiRespons
       }
       if (method === "GET" && first === "presets" && segs.length === 1) {
         sendJson(res, 200, await deps.listPresets())
+        return
+      }
+      if (method === "PUT" && first === "presets" && second && third === "model" && !fourth) {
+        const body = await readJsonBody(req)
+        const provider = typeof body.provider === "string" ? (body.provider.trim() || undefined) : undefined
+        const model = typeof body.model === "string" ? (body.model.trim() || undefined) : undefined
+        manager.setPresetModel(second, { provider, model })
+        sendJson(res, 200, { ok: true })
         return
       }
       if (first !== "sessions") {
@@ -162,6 +173,7 @@ export function createAgentApi(deps: ApiDeps): (req: ApiRequest, res: ApiRespons
           cwd: found?.cwd ?? null,
           title: found?.title ?? null,
           live: true,
+          agentPreset: found?.agentPreset,
         }
         sendJson(res, 200, { session, events: index.list(0), lastIdx: index.lastIdx })
         return

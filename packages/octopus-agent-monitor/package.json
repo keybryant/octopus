@@ -1,7 +1,7 @@
 {
-  "name": "octopus-workflow",
+  "name": "octopus-agent-monitor",
   "version": "0.1.0",
-  "description": "Agent workflow orchestration plugin for the octopus workbench",
+  "description": "Session-log-driven agent monitor plugin: token / consecutive tool error / turn limits with user-decision halts",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -24,27 +24,14 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-llm": "^0.1.1-rc.2",
-    "@deepseek-ai/dsh-tools": "^0.1.1-rc.2",
     "@deepseek-ai/schemastery": "^3.18.1"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "^4.0.1",
-    "octopus": "^0.1.0",
-    "octopus-agent-monitor": "^0.1.0",
-    "octopus-projects": "^0.1.0",
-    "octopus-requirements": "^0.1.0",
-    "octopus-tasks": "^0.1.0"
+    "@deepseek-ai/cordis": "^4.0.1"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@types/node": "^22.0.0",
-    "octopus": "file:../octopus",
-    "octopus-agent-monitor": "file:../octopus-agent-monitor",
-    "octopus-auth": "file:../octopus-auth",
-    "octopus-projects": "file:../octopus-projects",
-    "octopus-requirements": "file:../octopus-requirements",
-    "octopus-tasks": "file:../octopus-tasks",
-    "octopus-users": "file:../octopus-users",
     "typescript": "^5.6.0",
     "vitest": "^4.1.8"
   },

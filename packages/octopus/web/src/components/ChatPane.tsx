@@ -6,12 +6,14 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Input,
   Sheet,
   Spinner,
 } from "octopus-ui"
-import { FileText, History, Plus, Square } from "octopus-ui"
+import { FileText, History, Plus, Settings, Square } from "octopus-ui"
 import type { AgentClient, Artifact, PresetInfo, SessionContextInfo, SessionMeta } from "../lib/types"
 import { projectSessions, useChat } from "../lib/use-chat"
 import { ChatMessage } from "./ChatMessage"
@@ -53,7 +55,14 @@ function storePreset(id: string): void {
 
 export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsChange }: ChatPaneProps) {
   const { messages, status, send, artifacts, pendingQuestion, decideApproval, switchSession, switchProject, newSession } =
-    useChat(agentClient, { projectId, workspacePath })
+    useChat(agentClient, {
+      projectId,
+      workspacePath,
+      onPresetChange: (preset) => {
+        setPresetId(preset)
+        if (preset) storePreset(preset)
+      },
+    })
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [sessionsOpen, setSessionsOpen] = useState(false)
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -62,10 +71,16 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
   const [presetId, setPresetId] = useState<string | null>(() => readStoredPreset())
   const [contextOpen, setContextOpen] = useState(false)
   const [contextInfo, setContextInfo] = useState<SessionContextInfo | null>(null)
+  const [modelOpen, setModelOpen] = useState(false)
+  const [modelProvider, setModelProvider] = useState("")
+  const [modelName, setModelName] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const boundProjectRef = useRef<string | undefined>(projectId)
   const bound = Boolean(projectId && workspacePath)
-  const projectList = workspacePath ? projectSessions(sessions, workspacePath) : sessions
+  // 会话下拉：绑定模式下按项目过滤后截断（避免全局截断把本项目的 PM 会话挤出列表）
+  const projectList = workspacePath
+    ? projectSessions(sessions, workspacePath).slice(0, 20)
+    : sessions.slice(0, 20)
 
   // 项目绑定：项目切换 → 解析/创建该项目 PM 会话并载入
   useEffect(() => {
@@ -80,7 +95,7 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
   const refreshSessions = useCallback(async () => {
     if (!agentClient) return
     try {
-      const list = (await agentClient.listSessions()).slice(0, 20)
+      const list = await agentClient.listSessions()
       setSessions(list)
       setCurrentSessionId((prev) => prev ?? list[0]?.id ?? null)
     } catch {
@@ -88,15 +103,43 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
     }
   }, [agentClient])
 
-  useEffect(() => {
-    if (presets.length > 0 || !agentClient) return
-    void agentClient.listPresets().then((list) => {
+  const refreshPresets = useCallback(async () => {
+    if (!agentClient) return
+    try {
+      const list = await agentClient.listPresets()
       setPresets(list)
       setPresetId((prev) => prev ?? list[0]?.id ?? null)
-    }).catch(() => undefined)
-  }, [agentClient, presets.length])
+    } catch {
+      /* 保留上次列表 */
+    }
+  }, [agentClient])
+
+  useEffect(() => {
+    if (presets.length > 0 || !agentClient) return
+    void refreshPresets()
+  }, [agentClient, presets.length, refreshPresets])
 
   const selectedPreset = presets.find((p) => p.id === presetId) ?? null
+
+  const handleOpenModelSettings = () => {
+    setModelProvider(selectedPreset?.provider ?? "")
+    setModelName(selectedPreset?.model ?? "")
+    setModelOpen(true)
+  }
+
+  const handleSavePresetModel = async () => {
+    if (!agentClient || !selectedPreset) return
+    try {
+      await agentClient.savePresetModel(selectedPreset.id, {
+        provider: modelProvider.trim() || undefined,
+        model: modelName.trim() || undefined,
+      })
+      setModelOpen(false)
+      void refreshPresets()
+    } catch {
+      /* 保留打开，允许重试 */
+    }
+  }
 
   const handleOpenContext = async () => {
     setContextOpen(true)
@@ -200,10 +243,28 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
                         {p.description && (
                           <span className="truncate text-[11px] text-muted-foreground">{p.description}</span>
                         )}
+                        {p.model && (
+                          <span data-testid={`preset-model-${p.id}`} className="truncate font-mono text-[10.5px] text-accent">
+                            {p.model}
+                          </span>
+                        )}
                       </span>
                       {p.id === presetId && <Check className="h-4 w-4 shrink-0 text-accent" />}
                     </DropdownMenuItem>
                   ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem data-testid="preset-model-settings" onSelect={() => handleOpenModelSettings()}>
+                    <Settings className="h-4 w-4" />
+                    模型设置…
+                  </DropdownMenuItem>
+                  {selectedPreset && selectedPreset.model !== undefined && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuLabel className="px-3 py-1 text-[10.5px] font-normal text-muted-foreground">
+                        {selectedPreset.name ?? selectedPreset.id}：{selectedPreset.model || "平台默认"}
+                      </DropdownMenuLabel>
+                    </>
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
               <DropdownMenu open={sessionsOpen} onOpenChange={handleOpenSessions}>
@@ -340,6 +401,44 @@ export function ChatPane({ agentClient, projectId, workspacePath, onArtifactsCha
             </section>
           </div>
         )}
+      </Sheet>
+    <Sheet
+        open={modelOpen}
+        onOpenChange={(open) => setModelOpen(open)}
+        title="智能体模型设置"
+        subtitle={selectedPreset ? (selectedPreset.name ?? selectedPreset.id) : undefined}
+      >
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            为当前智能体单独指定模型，留空表示使用平台默认。修改后对该智能体新建的会话生效。
+          </p>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">模型</span>
+            <Input
+              data-testid="preset-model-input"
+              value={modelName}
+              onChange={(e) => setModelName(e.target.value)}
+              placeholder="例如 deepseek-v4-flash（留空=默认）"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs font-medium text-muted-foreground">提供方</span>
+            <Input
+              data-testid="preset-provider-input"
+              value={modelProvider}
+              onChange={(e) => setModelProvider(e.target.value)}
+              placeholder="例如 deepseek-official（留空=默认）"
+            />
+          </label>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setModelOpen(false)}>
+              取消
+            </Button>
+            <Button size="sm" data-testid="preset-model-save" onClick={() => void handleSavePresetModel()}>
+              保存
+            </Button>
+          </div>
+        </div>
       </Sheet>
     </main>
   )

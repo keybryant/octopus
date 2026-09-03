@@ -13,6 +13,8 @@ function streamText(events: Array<{ idx: number; payload: unknown }>): { ok: boo
 
 const SESSION_S1 = { id: "s1", createdAt: "t", cwd: null, title: "t", live: true }
 
+let sessionCounter = 1
+
 class FakeEventSource {
   static instances: FakeEventSource[] = []
   url: string
@@ -212,6 +214,32 @@ describe("createHttpAgentClient", () => {
     expect(FakeEventSource.instances[0].url).toBe("/api/octopus-agent/sessions/s1/events?after=0")
   })
 
+  it("startSession resets the event watermark so fresh session events are delivered", async () => {
+    FakeEventSource.instances = []
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url === "/api/octopus-agent/sessions" && init?.method === "POST") {
+        return plain({ session: { ...SESSION_S1, id: sessionCounter++ } }) as never
+      }
+      return plain({}) as never
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    vi.stubGlobal("EventSource", FakeEventSource)
+    const client = createHttpAgentClient()
+    await client.startSession()
+    const received: AgentStreamEvent[] = []
+    client.subscribe((ev) => received.push(ev))
+    const es = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+    es.onmessage?.({ data: JSON.stringify({ idx: 3, type: "status", status: "running" }) })
+    expect(received).toHaveLength(1)
+
+    await client.startSession()
+    const es2 = FakeEventSource.instances[FakeEventSource.instances.length - 1]
+    expect(es2.url).toBe(`/api/octopus-agent/sessions/${sessionCounter - 1}/events?after=0`)
+    es2.onmessage?.({ data: JSON.stringify({ idx: 0, type: "user-message", text: "hi" }) })
+    expect(received.map((ev) => ev.type)).toEqual(["status", "user-message"])
+  })
+
   it("switchTo closes the previous stream and opens a new one for the new session", async () => {
     FakeEventSource.instances = []
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
@@ -285,6 +313,18 @@ describe("createHttpAgentClient", () => {
     expect(fetchMock.mock.calls.some(([input, init]) =>
       String(input) === "/api/octopus-agent/sessions" && String(init?.body) === '{"cwd":"/p","agentPreset":"minimal"}',
     )).toBe(true)
+  })
+
+  it("saves a preset model via PUT with trimmed spec", async () => {
+    const fetchMock = vi.fn(async () => plain({ ok: true }) as never)
+    vi.stubGlobal("fetch", fetchMock)
+    const client = createHttpAgentClient()
+    await client.savePresetModel("octopus-developer", { provider: "", model: "deepseek-v4-flash" })
+    expect(fetchMock).toHaveBeenCalledWith("/api/octopus-agent/presets/octopus-developer/model", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ provider: "", model: "deepseek-v4-flash" }),
+    })
   })
 })
 

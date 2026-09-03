@@ -3,6 +3,7 @@ import type { Domain } from "@deepseek-ai/dsh-storage-domain"
 import { TASKS_DOMAIN, type TasksDomain } from "./unit.js"
 import {
   assertTransition,
+  TASK_STATUS_CHANGED_EVENT,
   TasksError,
   type TaskDraft,
   type TaskInput,
@@ -23,11 +24,14 @@ export interface TaskStoreOptions {
 }
 
 export class TaskStore {
-  private constructor(private readonly domain: Domain<TasksDomain>) {}
+  private constructor(
+    private readonly domain: Domain<TasksDomain>,
+    private readonly ctx: Context,
+  ) {}
 
   static async open(ctx: Context, options: TaskStoreOptions = {}): Promise<TaskStore> {
     const domain = await ctx.storageDomain.open(TASKS_DOMAIN)
-    const store = new TaskStore(domain)
+    const store = new TaskStore(domain, ctx)
     await store.ensureSeq(options.startSeq ?? 2800)
     return store
   }
@@ -108,11 +112,14 @@ export class TaskStore {
     if (!input.title.trim()) throw new TasksError("invalid-input", "title is required")
     if (!input.requirementId.trim()) throw new TasksError("invalid-input", "requirementId is required")
     if (!input.projectId.trim()) throw new TasksError("invalid-input", "projectId is required")
+    if (input.agent !== undefined && !input.agent.trim()) {
+      throw new TasksError("invalid-input", "agent must be a non-empty string")
+    }
   }
 
   private buildRecord(id: string, input: TaskInput): TaskRecord {
     const now = new Date().toISOString()
-    return {
+    const record: TaskRecord = {
       id,
       title: input.title.trim(),
       description: input.description?.trim() ?? "",
@@ -122,10 +129,14 @@ export class TaskStore {
       createdAt: now,
       updatedAt: now,
     }
+    if (input.agent !== undefined) record.agent = input.agent.trim()
+    return record
   }
 
   async update(id: string, patch: TaskPatch): Promise<TaskRecord> {
-    if (!this.domain.table(TASK_TABLE).get(id)) {
+    const table = this.domain.table(TASK_TABLE)
+    const before = table.get(id)
+    if (!before) {
       throw new TasksError("not-found", `task ${id} not found`)
     }
     if (Object.keys(patch).length === 0) {
@@ -134,8 +145,7 @@ export class TaskStore {
     if (patch.title !== undefined && !patch.title.trim()) {
       throw new TasksError("invalid-input", "title is required")
     }
-    const table = this.domain.table(TASK_TABLE)
-    return table.update(id, (current) => {
+    const after = await table.update(id, (current) => {
       if (patch.status !== undefined && patch.status !== current.status) {
         assertTransition(current.status, patch.status)
       }
@@ -143,6 +153,10 @@ export class TaskStore {
       if (patch.title !== undefined) next.title = patch.title.trim()
       return next
     })
+    if (patch.status !== undefined && after.status !== before.status) {
+      this.ctx.emit(TASK_STATUS_CHANGED_EVENT, after)
+    }
+    return after
   }
 
   /** 关联/解除任务子会话（workflow 内部专用：REST 不暴露）。sessionId 传 null 时清除关联 */

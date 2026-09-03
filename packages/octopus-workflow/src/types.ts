@@ -13,6 +13,7 @@ export type TaskSessionEvent =
   | { type: "tool-result"; name: string; ok: boolean; preview: string }
   | { type: "turn"; at: "start" | "end"; reason?: string }
   | { type: "error"; message: string }
+  | { type: "monitor-halt"; reason: string; message: string }
 
 /**
  * 镜像 octopus-tasks 的 TaskPatch（该包根导出缺失，此处从 TaskRecord 本地推导，

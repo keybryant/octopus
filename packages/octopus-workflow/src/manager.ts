@@ -59,6 +59,15 @@ export interface PersistenceLike {
   load(id: string): Promise<{ meta: { cwd: unknown; createdAt: unknown }; events: SessionEventLike[] }>
 }
 
+/** agent-monitor/halted 事件载荷最小面（与 octopus-agent-monitor AgentMonitorHaltEvent 结构一致） */
+export interface MonitorHaltEventLike {
+  sessionId: string
+  reason: string
+  used: number
+  limit: number
+  message: string
+}
+
 export interface ManagerDeps {
   agents: AgentsLike
   taskStore: TaskStoreLike
@@ -69,6 +78,8 @@ export interface ManagerDeps {
   defaultAgentPreset: string
   provider?: string
   model?: string
+  /** 按预设 id 取模型覆盖（octopus-agent 提供的 agentPresetModels 服务；未挂载时缺省） */
+  presetModels?(presetId: string): { provider?: string; model?: string } | undefined
   approval: "allow" | "never"
   buildTaskSetup: (taskId: string) => (agentCtx: AgentCtxLike) => void
   /** 可选：会话持久化读取（非 live 会话的 transcript 重建用） */
@@ -123,10 +134,13 @@ export class TaskSessionManager {
     this.currentNow = fn
   }
 
-  private agentOptions(): { provider?: string; model?: string } {
+  private agentOptions(presetId?: string): { provider?: string; model?: string } {
     const options: { provider?: string; model?: string } = {}
-    if (this.deps.provider !== undefined) options.provider = this.deps.provider
-    if (this.deps.model !== undefined) options.model = this.deps.model
+    const preset = presetId !== undefined ? this.deps.presetModels?.(presetId) : undefined
+    const provider = preset?.provider ?? this.deps.provider
+    const model = preset?.model ?? this.deps.model
+    if (provider !== undefined) options.provider = provider
+    if (model !== undefined) options.model = model
     return options
   }
 
@@ -153,26 +167,22 @@ export class TaskSessionManager {
     const task = this.deps.taskStore.get(taskId)
     if (!task) throw new WorkflowError("task-not-found", `task ${taskId} not found`)
 
-    const fresh = task.agentSessionId === undefined
-    const sessionId = task.agentSessionId ?? this.deps.sessionIdFactory()
+    // 每次派发（todo→doing）都为该任务创建全新会话，不复用历史会话
+    const sessionId = this.deps.sessionIdFactory()
+    const cwd = this.resolveCwd(task)
     let handle: AgentHandleLike
-    if (fresh) {
-      const cwd = this.resolveCwd(task)
-      try {
-        handle = await this.deps.agents.create({
-          sessionId,
-          meta: { cwd: cwd ?? undefined, agentPreset: this.deps.defaultAgentPreset, taskId },
-          agentOptions: this.agentOptions(),
-          setup: this.deps.buildTaskSetup(taskId),
-        })
-      } catch (error) {
-        throw new WorkflowError(
-          "session-unavailable",
-          `task session create failed: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-    } else {
-      handle = await this.resumeOrThrow(taskId, sessionId)
+    try {
+      handle = await this.deps.agents.create({
+        sessionId,
+        meta: { cwd: cwd ?? undefined, agentPreset: task.agent ?? this.deps.defaultAgentPreset, taskId },
+        agentOptions: this.agentOptions(task.agent ?? this.deps.defaultAgentPreset),
+        setup: this.deps.buildTaskSetup(taskId),
+      })
+    } catch (error) {
+      throw new WorkflowError(
+        "session-unavailable",
+        `task session create failed: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
     if (this.starting.get(taskId)?.token !== token) {
       // stop 已接管（或已被新 start 取代）：不写 entry，释放刚取得的 handle
@@ -180,7 +190,7 @@ export class TaskSessionManager {
       return { sessionId, task: this.deps.taskStore.get(taskId) ?? task }
     }
     try {
-      if (fresh) await this.deps.taskStore.attachSession(taskId, sessionId)
+      await this.deps.taskStore.attachSession(taskId, sessionId)
       if (task.status === "todo") {
         await this.deps.taskStore.update(taskId, { status: "doing" })
       }
@@ -195,7 +205,7 @@ export class TaskSessionManager {
     const entry: Entry = { taskId, sessionId, handle, events: [], log: [], lastActivityMs: this.currentNow(), status: handle.agent.status }
     this.entries.set(taskId, entry)
     this.listenLive(taskId, entry, handle)
-    if (fresh) this.kick(taskId, handle)
+    this.kick(taskId, handle)
     const updated = this.deps.taskStore.get(taskId) ?? task
     return { sessionId, task: updated }
   }
@@ -215,6 +225,28 @@ export class TaskSessionManager {
     this.settleAsk(taskId)
     await this.deps.taskStore.attachSession(taskId, null)
     return this.deps.taskStore.reopen(taskId)
+  }
+
+  /**
+   * 会话监控停机事件（octopus-agent-monitor 广播）：任务子会话超限停机后，
+   * 记录停机事件、回退任务到 todo 并解除会话关联——等待用户在看板重新派发（新会话从零计数）。
+   */
+  handleMonitorHalted(payload: MonitorHaltEventLike): void {
+    const entry = this.findEntryBySessionId(payload.sessionId)
+    if (!entry) return
+    const halt: TaskSessionEvent = { type: "monitor-halt", reason: payload.reason, message: payload.message }
+    entry.events = appendEvent(entry.events, halt)
+    entry.log = appendEvent(entry.log, halt, LOG_MAX)
+    void this.stop(entry.taskId).catch((error) => {
+      console.warn(`[octopus-workflow] monitor-halt stop failed for task ${entry.taskId}:`, error)
+    })
+  }
+
+  private findEntryBySessionId(sessionId: string): Entry | undefined {
+    for (const entry of this.entries.values()) {
+      if (entry.sessionId === sessionId) return entry
+    }
+    return undefined
   }
 
   /** 释放 ask 等待者（stop/withdraw 时以已有内容结算，避免悬挂） */

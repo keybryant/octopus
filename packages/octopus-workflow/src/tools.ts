@@ -25,7 +25,6 @@ export const MAIN_TOOL_NAMES = [
   "get_task",
   "create_tasks",
   "update_task",
-  "start_task_session",
   "send_to_task_session",
   "task_session_status",
   "stop_task_session",
@@ -48,7 +47,7 @@ export interface MainToolsDeps {
   }
   tasks: TaskStoreLike & {
     list?(filter?: (record: TaskRecord) => boolean): TaskRecord[]
-    createBatch?(input: { requirementId: string; projectId: string; tasks: { title: string; description?: string }[] }): Promise<TaskRecord[]>
+    createBatch?(input: { requirementId: string; projectId: string; tasks: { title: string; description?: string; agent?: string }[] }): Promise<TaskRecord[]>
   }
   projects: ProjectStoreLike & { list?(): ProjectView[] }
   sessions: TaskSessionLike
@@ -113,6 +112,8 @@ function formatEvent(e: TaskSessionEvent): string {
       return `[回合${e.at === "start" ? "开始" : "结束"}${e.reason !== undefined ? ` ${e.reason}` : ""}]`
     case "error":
       return `[错误] ${e.message}`
+    case "monitor-halt":
+      return `[监控停机] ${e.message}`
   }
 }
 
@@ -350,7 +351,7 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "create_tasks",
-      description: "按需求拆解结果批量保存任务到当前项目（一次最多 50 条，全有或全无）。先 get_requirement 获取需求，再在对话内拆解为任务列表后调用本工具。",
+      description: "按需求拆解结果批量保存任务到当前项目（一次最多 50 条，全有或全无）。每条任务可指定执行的智能体（agent，可选，用 list_agent_roles 查看可用角色）；任务创建后处于待处理（todo），将任务置为 doing（执行中）即会自动为该任务创建独立执行会话并驱动指定智能体开工。",
       parameters: {
         requirementId: { type: "string", required: true, description: "所属需求 id。" },
         tasks: {
@@ -360,6 +361,7 @@ export function createMainTools(deps: MainToolsDeps) {
             properties: {
               title: { type: "string", required: true, description: "任务标题。" },
               description: { type: "string", description: "任务描述。" },
+              agent: { type: "string", description: "执行该任务的智能体角色 id（如 octopus-developer / octopus-designer），须为 list_agent_roles 列出的角色；缺省用默认智能体。" },
             },
           },
         },
@@ -384,7 +386,7 @@ export function createMainTools(deps: MainToolsDeps) {
     }),
     defineTool({
       name: "update_task",
-      description: "更新当前项目的任务（标题/描述/状态）。状态仅允许单向推进：todo → doing → review → done；review 由子 agent 或用户确认后置 done。",
+      description: "更新当前项目的任务（标题/描述/状态）。状态仅允许单向推进：todo → doing → review → done。将任务置为 doing（执行中）会自动为该任务创建新的独立执行会话并启动其指定智能体执行；review 由子 agent 或用户确认后置 done。",
       parameters: {
         id: { type: "string", required: true, description: "任务 id。" },
         title: { type: "string", description: "新标题。" },
@@ -404,30 +406,6 @@ export function createMainTools(deps: MainToolsDeps) {
           if (args.description !== undefined) patch.description = args.description
           if (args.status !== undefined) patch.status = args.status
           return await tasks.update(args.id, patch)
-        } catch (error) {
-          throw toolError(error)
-        }
-      },
-    }),
-    defineTool({
-      name: "start_task_session",
-      description: "为当前项目的任务创建/恢复独立 agent 子会话并启动执行（任务自动置 doing）。已有会话时返回既有会话。",
-      parameters: { taskId: { type: "string", required: true, description: "任务 id。" } },
-      output: {
-        schema: {
-          type: "object", additionalProperties: false,
-          properties: {
-            sessionId: { type: "string", required: true },
-            task: { ...taskObjectSchema, required: true },
-          },
-        },
-        render: (_args, value) => text(`task session started: ${value.sessionId}\n${formatTask(value.task)}`),
-      },
-      async execute(args, exec) {
-        try {
-          const current = requireCurrentProject(exec, projects)
-          guardTask(args.taskId, current)
-          return await sessions.start(args.taskId)
         } catch (error) {
           throw toolError(error)
         }

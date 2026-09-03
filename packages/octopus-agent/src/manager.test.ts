@@ -57,6 +57,7 @@ function makeManager(opts: {
     provider: undefined,
     model: undefined,
     idleTtlMs: 0,
+    presetModels: new Map(),
     ...opts.deps,
   })
   return { manager, agents, persistence }
@@ -69,6 +70,7 @@ describe("AgentManager", () => {
     expect(meta.id).toMatch(/^oct-/)
     expect(meta.cwd).toBe("/project/open")
     expect(meta.live).toBe(true)
+    expect(meta.agentPreset).toBe("standard")
     expect(agents.create).toHaveBeenCalledWith(expect.objectContaining({
       sessionId: meta.id,
       meta: expect.objectContaining({ cwd: "/project/open", agentPreset: "standard" }),
@@ -83,6 +85,48 @@ describe("AgentManager", () => {
       meta: { cwd: "/home", agentPreset: "standard" },
       agentOptions: {},
     }))
+  })
+
+  it("create uses preset model override, explicit input wins", async () => {
+    const { manager, agents } = makeManager({
+      deps: {
+        roles: [{ id: "octopus-developer", name: "开发工程师", description: "编码" }],
+        presetModels: new Map([["octopus-developer", { provider: "p-a", model: "model-a" }]]),
+        model: "global-default",
+      },
+    })
+    await manager.create({ agentPreset: "octopus-developer" })
+    expect(agents.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentOptions: { provider: "p-a", model: "model-a" },
+    }))
+    await manager.create({ agentPreset: "octopus-developer", model: "explicit" })
+    expect(agents.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentOptions: { provider: "p-a", model: "explicit" },
+    }))
+    await manager.create({ agentPreset: "unknown-preset" })
+    expect(agents.create).toHaveBeenCalledWith(expect.objectContaining({
+      agentOptions: { model: "global-default" },
+    }))
+  })
+
+  it("setPresetModel validates role, updates map and persists", async () => {
+    const save = vi.fn()
+    const map = new Map<string, { provider?: string; model?: string }>()
+    const { manager } = makeManager({
+      deps: {
+        roles: [{ id: "octopus-pm", name: "项目负责人", description: "排期" }],
+        presetModels: map,
+        savePresetModels: save,
+      },
+    })
+    expect(() => manager.setPresetModel("nope", { model: "x" })).toThrow("preset nope not found")
+    manager.setPresetModel("octopus-pm", { model: "deepseek-v4-flash" })
+    expect(map.get("octopus-pm")).toEqual({ provider: undefined, model: "deepseek-v4-flash" })
+    expect(manager.presetModelOf("octopus-pm")).toEqual({ model: "deepseek-v4-flash" })
+    expect(save).toHaveBeenCalledTimes(1)
+    manager.setPresetModel("octopus-pm", { provider: undefined, model: undefined })
+    expect(manager.presetModelOf("octopus-pm")).toBeUndefined()
+    expect(map.has("octopus-pm")).toBe(false)
   })
 
   it("omits cwd when neither input nor default is provided", async () => {
@@ -246,7 +290,7 @@ describe("AgentManager", () => {
   it("merges snapshots with live entries and evicts long-idle sessions", async () => {
     let now = 1000
     const snapshots = [
-      { header: { id: "oct-AAAAAAA1", createdAt: "2026-01-01T00:00:00.000Z", meta: { cwd: "/old" } } },
+      { header: { id: "oct-AAAAAAA1", createdAt: "2026-01-01T00:00:00.000Z", meta: { cwd: "/old", agentPreset: "octopus-pm" } } },
       { header: { id: "oct-SNAPSHOT", createdAt: "2026-01-02T00:00:00.000Z" } },
     ]
     const { manager, agents } = makeManager({
@@ -258,12 +302,31 @@ describe("AgentManager", () => {
     const first = await manager.list()
     expect(first.map((meta) => meta.id)).toEqual(["oct-AAAAAAA1", "oct-SNAPSHOT"])
     expect(first.find((meta) => meta.id === "oct-SNAPSHOT")).toMatchObject({ live: false, cwd: null })
+    expect(first.find((meta) => meta.id === "oct-AAAAAAA1")).toMatchObject({ live: true, cwd: "/live" })
     now = 5000
     const second = await manager.list()
     expect(second.map((meta) => meta.id)).toEqual(["oct-SNAPSHOT", "oct-AAAAAAA1"])
-    expect(second[1]).toMatchObject({ live: false, cwd: "/old", createdAt: "2026-01-01T00:00:00.000Z" })
+    expect(second[1]).toMatchObject({
+      live: false,
+      cwd: "/old",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      agentPreset: "octopus-pm",
+    })
     const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
     expect(handle.dispose).toHaveBeenCalled()
+  })
+
+  it("resume 从持久化历史恢复 agentPreset", async () => {
+    const { manager, agents } = makeManager({
+      persistLoad: vi.fn(async () => ({
+        meta: { cwd: "/p", createdAt: 1, agentPreset: "octopus-designer" },
+        events: [],
+      })),
+    })
+    await manager.resume("oct-AAAAAAA1")
+    const metas = await manager.list()
+    expect(metas.find((m) => m.id === "oct-AAAAAAA1")).toMatchObject({ live: true, agentPreset: "octopus-designer" })
+    expect(agents.resume).toHaveBeenCalledWith(expect.objectContaining({ resumeSessionId: "oct-AAAAAAA1" }))
   })
 
   it("maps persistence and resume failures to manager errors", async () => {
@@ -305,5 +368,73 @@ describe("AgentManager", () => {
     const { answerPromise } = manager.beginQuestion(meta.id, { callerItemId: "ask-1", question: "q?" })
     await manager.dispose(meta.id)
     await expect(answerPromise).resolves.toEqual({ answers: [] })
+  })
+
+  it("monitor halt surfaces a question banner with continue/stop options", async () => {
+    const { manager } = makeManager()
+    const meta = await manager.create({})
+    manager.handleMonitorHalted({
+      sessionId: meta.id,
+      reason: "tokens",
+      used: 120,
+      limit: 100,
+      message: "已消耗 120 tokens，达到限额 100",
+    })
+    const idx = await manager.getIndex(meta.id)
+    expect(idx.list()[0]).toMatchObject({
+      type: "question",
+      question: "已消耗 120 tokens，达到限额 100，是否继续执行？",
+      options: ["继续执行", "停止"],
+    })
+  })
+
+  it("monitor halt ignores sessions it does not manage", async () => {
+    const { manager } = makeManager()
+    manager.handleMonitorHalted({
+      sessionId: "oct-UNKNOWN",
+      reason: "turns",
+      used: 5,
+      limit: 5,
+      message: "已完成 5 轮，达到轮数限额 5",
+    })
+    expect((await manager.list()).length).toBeGreaterThanOrEqual(0)
+  })
+
+  it("answering continue resumes the monitored session without followup", async () => {
+    const resume = vi.fn()
+    const { manager, agents } = makeManager({ deps: { agentMonitor: { resume } } })
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    manager.handleMonitorHalted({
+      sessionId: meta.id,
+      reason: "tokens",
+      used: 100,
+      limit: 100,
+      message: "已消耗 100 tokens，达到限额 100",
+    })
+    const idx = await manager.getIndex(meta.id)
+    const qevent = idx.list()[0]
+    await manager.send(meta.id, "继续执行", (qevent as { id: string }).id)
+    expect(resume).toHaveBeenCalledWith(meta.id)
+    expect(handle.agent.followup).not.toHaveBeenCalled()
+  })
+
+  it("answering stop leaves the monitored session stopped", async () => {
+    const resume = vi.fn()
+    const { manager, agents } = makeManager({ deps: { agentMonitor: { resume } } })
+    const meta = await manager.create({})
+    const handle = (await agents.create.mock.results[0].value) as AgentHandleLike
+    manager.handleMonitorHalted({
+      sessionId: meta.id,
+      reason: "tool-errors",
+      used: 3,
+      limit: 3,
+      message: "工具调用已连续失败 3 次，达到限额 3",
+    })
+    const idx = await manager.getIndex(meta.id)
+    const qevent = idx.list()[0]
+    await manager.send(meta.id, "停止", (qevent as { id: string }).id)
+    expect(resume).not.toHaveBeenCalled()
+    expect(handle.agent.followup).not.toHaveBeenCalled()
   })
 })

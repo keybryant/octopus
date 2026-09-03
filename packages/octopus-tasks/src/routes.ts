@@ -105,7 +105,7 @@ function requireString(raw: Record<string, unknown>, key: string, label: string)
   return raw[key] as string
 }
 
-/** batch 任务草稿：仅 title/description，多余字段忽略 */
+/** batch 任务草稿：仅 title/description/agent，多余字段忽略 */
 function parseDraft(raw: Record<string, unknown>, required: boolean): TaskDraft {
   const hasTitle = typeof raw.title === "string" && (raw.title as string).trim().length > 0
   if (!hasTitle) {
@@ -116,6 +116,10 @@ function parseDraft(raw: Record<string, unknown>, required: boolean): TaskDraft 
   if (raw.description !== undefined) {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     draft.description = raw.description
+  }
+  if (raw.agent !== undefined) {
+    if (typeof raw.agent !== "string") throw new ApiError(400, "invalid-input", "agent must be a string")
+    draft.agent = raw.agent
   }
   return draft
 }
@@ -130,6 +134,10 @@ export function parseCreateInput(body: unknown): TaskInput {
   if (raw.description !== undefined) {
     if (typeof raw.description !== "string") throw new ApiError(400, "invalid-input", "description must be a string")
     input.description = raw.description
+  }
+  if (raw.agent !== undefined) {
+    if (typeof raw.agent !== "string") throw new ApiError(400, "invalid-input", "agent must be a string")
+    input.agent = raw.agent
   }
   return input
 }

@@ -66,7 +66,7 @@ describe("octopus-agent plugin", () => {
   it("config has defaults", () => {
     const cfg = Config()
     expect(cfg.defaultAgentPreset).toBe("standard")
-    expect(cfg.idleTtlMs).toBe(30 * 60 * 1000)
+    expect(cfg.idleTtlMs).toBe(24 * 60 * 60 * 1000)
   })
 })
 

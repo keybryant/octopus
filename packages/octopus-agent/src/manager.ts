@@ -40,12 +40,12 @@ export interface AgentsLike {
 }
 
 export interface HistoryLike {
-  meta: { cwd: unknown; createdAt: unknown }
+  meta: { cwd: unknown; createdAt: unknown; agentPreset?: unknown }
   events: unknown[]
 }
 
 export interface SnapshotLike {
-  header: { id: string; createdAt: unknown; meta?: { cwd?: unknown } }
+  header: { id: string; createdAt: unknown; meta?: { cwd?: unknown; agentPreset?: unknown } }
 }
 
 export interface PersistenceLike {
@@ -94,6 +94,20 @@ export interface AgentRole {
   description: string
 }
 
+/** octopus-agent-monitor 提供的续跑服务最小面（未挂载时缺省） */
+export interface AgentMonitorLike {
+  resume(sessionId: string): void
+}
+
+/** agent-monitor/halted 事件载荷最小面（与 octopus-agent-monitor AgentMonitorHaltEvent 结构一致） */
+export interface MonitorHaltEventLike {
+  sessionId: string
+  reason: string
+  used: number
+  limit: number
+  message: string
+}
+
 export interface ManagerDeps {
   agents: AgentsLike
   persistence: PersistenceLike
@@ -103,11 +117,17 @@ export interface ManagerDeps {
   provider?: string
   model?: string
   idleTtlMs: number
+  /** 预设 → 模型覆盖（工作台可改；创建会话时 显式入参 > 预设覆盖 > 全局默认） */
+  presetModels: Map<string, { provider?: string; model?: string }>
+  /** 持久化回调（默认 agent-models.json；tests 缺省） */
+  savePresetModels?(): void
   personas?: AgentPersona[]
   roles?: AgentRole[]
   systemPrompt?: {
     assemble(scope: unknown): Promise<{ prompt: string; context: string }>
   }
+  /** 可选：会话监控服务（octopus-agent-monitor 提供）；halt 后用户选"继续执行"时续跑 */
+  agentMonitor?: AgentMonitorLike
 }
 
 function setupForMeta(
@@ -163,7 +183,7 @@ function extrasOnly(deps: Pick<ManagerDeps, "personas" | "roles">): boolean {
 }
 
 export class ManagerError extends Error {  constructor(
-    readonly code: "SESSION_EXISTS" | "SESSION_NOT_FOUND" | "APPROVAL_NOT_FOUND" | "AGENT_LOOP_UNAVAILABLE",
+    readonly code: "SESSION_EXISTS" | "SESSION_NOT_FOUND" | "APPROVAL_NOT_FOUND" | "AGENT_LOOP_UNAVAILABLE" | "PRESET_NOT_FOUND",
     message: string,
   ) {
     super(message)
@@ -179,6 +199,8 @@ interface PendingQuestion {
   qid: string
   callerItemId: string
   sessionId: string
+  origin?: string
+  options?: string[]
   resolve(answers: QuestionAnswers): void
 }
 
@@ -186,6 +208,8 @@ export interface QuestionItem {
   callerItemId: string
   question: string
   options?: string[]
+  /** 问题来源标记："monitor" = 监控限额停机发起，答案按监控语义处理（继续→resume） */
+  origin?: string
 }
 
 type IndexEventInput = Parameters<EventIndex["append"]>[0]
@@ -227,19 +251,30 @@ export class AgentManager {
     const cwd = input.cwd ?? this.deps.defaultCwd
     if (typeof cwd === "string") meta.cwd = cwd
     meta.agentPreset = input.agentPreset ?? this.deps.defaultAgentPreset
+    const presetModel = this.presetModelOf(meta.agentPreset)
     let handle: AgentHandleLike
     try {
       handle = await this.deps.agents.create({
         sessionId: id,
         meta,
-        agentOptions: this.agentOptions(input.provider, input.model),
+        agentOptions: this.agentOptions(
+          input.provider ?? presetModel?.provider,
+          input.model ?? presetModel?.model,
+        ),
         ...(setupForMeta(meta, this.deps) !== undefined && { setup: setupForMeta(meta, this.deps) }),
       })
     } catch (error) {
       throw new ManagerError("AGENT_LOOP_UNAVAILABLE", `agent create failed: ${error instanceof Error ? error.message : String(error)}`)
     }
     const entry: SessionEntry = {
-      meta: { id, createdAt: new Date().toISOString(), cwd: meta.cwd ?? null, title: null, live: true },
+      meta: {
+        id,
+        createdAt: new Date().toISOString(),
+        cwd: meta.cwd ?? null,
+        title: null,
+        live: true,
+        agentPreset: meta.agentPreset,
+      },
       handle,
       index: new EventIndex(),
       pendingApprovals: new Map(),
@@ -284,6 +319,7 @@ export class AgentManager {
         cwd: typeof history.meta.cwd === "string" ? history.meta.cwd : null,
         title: deriveTitle(captured),
         live: true,
+        agentPreset: typeof history.meta.agentPreset === "string" ? history.meta.agentPreset : undefined,
       },
       handle,
       index,
@@ -359,6 +395,7 @@ export class AgentManager {
       cwd: typeof snapshot.header.meta?.cwd === "string" ? snapshot.header.meta.cwd : null,
       title: null,
       live: false,
+      agentPreset: typeof snapshot.header.meta?.agentPreset === "string" ? snapshot.header.meta.agentPreset : undefined,
     }
   }
 
@@ -404,12 +441,61 @@ export class AgentManager {
       if (pending) {
         pending.resolve({ answers: [{ id: pending.callerItemId, selected: [], custom: text }] })
         entry.pendingQuestions.delete(answerQuestionId)
+        this.afterQuestionAnswer(entry, pending, text)
         entry.lastActivityMs = this.currentNow()
         return
       }
     }
     entry.handle!.agent.followup(createUserMessage({ content: [{ type: "text", text }], source: { kind: "user" } }))
     entry.lastActivityMs = this.currentNow()
+  }
+
+  /** 问题答案的语义分支：监控停机问题选"继续执行"→ 重置计数并续跑；其余照常 */
+  private afterQuestionAnswer(entry: SessionEntry, pending: PendingQuestion, text: string): void {
+    if (pending.origin !== "monitor") return
+    const continueOption = pending.options?.[0]
+    if (continueOption !== undefined && text === continueOption) {
+      this.deps.agentMonitor?.resume(entry.meta.id)
+    }
+  }
+
+  /**
+   * 会话监控停机事件（octopus-agent-monitor 广播）：为本 manager 管辖的会话弹出问题横幅，
+   * 等待用户决策（继续执行 / 停止）。
+   */
+  handleMonitorHalted(payload: MonitorHaltEventLike): void {
+    const entry = this.entries.get(payload.sessionId)
+    if (!entry?.handle) return
+    this.beginQuestion(entry.meta.id, {
+      callerItemId: "agent-monitor",
+      origin: "monitor",
+      question: `${payload.message}，是否继续执行？`,
+      options: ["继续执行", "停止"],
+    })
+  }
+
+  /** 读取某预设配置的模型覆盖（无则 undefined） */
+  presetModelOf(presetId: string): { provider?: string; model?: string } | undefined {
+    const spec = this.deps.presetModels.get(presetId)
+    if (!spec) return undefined
+    if (spec.provider === undefined && spec.model === undefined) return undefined
+    return { ...spec }
+  }
+
+  /** 设置预设模型覆盖（provider/model 传 undefined 表示清空该项；两项都空时删除覆盖） */
+  setPresetModel(presetId: string, spec: { provider?: string; model?: string }): void {
+    if (this.deps.roles && !this.deps.roles.some((role) => role.id === presetId)) {
+      throw new ManagerError("PRESET_NOT_FOUND", `preset ${presetId} not found`)
+    }
+    if (spec.provider === undefined && spec.model === undefined) {
+      this.deps.presetModels.delete(presetId)
+    } else {
+      this.deps.presetModels.set(presetId, {
+        provider: spec.provider,
+        model: spec.model,
+      })
+    }
+    this.deps.savePresetModels?.()
   }
 
   beginQuestion(sessionId: string, item: QuestionItem): { qid: string; answerPromise: Promise<QuestionAnswers> } {
@@ -420,7 +506,14 @@ export class AgentManager {
     const answerPromise = new Promise<QuestionAnswers>((resolve) => {
       resolveAnswers = resolve
     })
-    entry.pendingQuestions.set(qid, { qid, callerItemId: item.callerItemId, sessionId, resolve: resolveAnswers })
+    entry.pendingQuestions.set(qid, {
+      qid,
+      callerItemId: item.callerItemId,
+      sessionId,
+      origin: item.origin,
+      options: item.options,
+      resolve: resolveAnswers,
+    })
     entry.index.append({ type: "question", id: qid, question: item.question, options: item.options })
     entry.lastActivityMs = this.currentNow()
     return { qid, answerPromise }

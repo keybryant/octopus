@@ -6,6 +6,7 @@ import { createTaskApiHandler } from "./routes.js"
 import { TaskStore } from "./store.js"
 
 export type { TaskDraft, TaskRecord, TaskStatus } from "./types.js"
+export { TASK_STATUS_CHANGED_EVENT } from "./types.js"
 
 declare module "@deepseek-ai/cordis" {
   interface Context {

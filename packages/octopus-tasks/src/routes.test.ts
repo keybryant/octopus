@@ -62,6 +62,12 @@ describe("parse*Input", () => {
       description: "d",
     })
     expect(parseCreateInput({ title: "B", requirementId: "R", projectId: "p" })).toEqual({ title: "B", requirementId: "R", projectId: "p" })
+    expect(parseCreateInput({ title: "A", requirementId: "R", projectId: "p", agent: "octopus-developer" })).toEqual({
+      title: "A",
+      requirementId: "R",
+      projectId: "p",
+      agent: "octopus-developer",
+    })
     expect(() => parseCreateInput({ title: "A", projectId: "p" })).toThrowError(/requirementId is required/)
   })
 
@@ -69,9 +75,9 @@ describe("parse*Input", () => {
     const parsed = parseBatchInput({
       requirementId: "R",
       projectId: "p",
-      tasks: [{ title: "A", description: "d", extra: 1 }, { title: "B" }],
+      tasks: [{ title: "A", description: "d", agent: "octopus-developer", extra: 1 }, { title: "B" }],
     })
-    expect(parsed.tasks).toEqual([{ title: "A", description: "d" }, { title: "B" }])
+    expect(parsed.tasks).toEqual([{ title: "A", description: "d", agent: "octopus-developer" }, { title: "B" }])
     expect(() => parseBatchInput({ requirementId: "R", projectId: "p", tasks: "x" })).toThrowError(/tasks/)
     expect(() => parseBatchInput({ requirementId: "R", tasks: [{ title: "A" }] })).toThrowError(/projectId is required/)
   })
@@ -116,6 +122,7 @@ describe("task REST API", () => {
       requirementId: "REQ-100",
       projectId: "p-alpha",
       description: "控制台导出",
+      agent: "octopus-developer",
       status: "done",
     })
     expect(res.calls[0].status).toBe(201)
@@ -125,6 +132,7 @@ describe("task REST API", () => {
       requirementId: "REQ-100",
       projectId: "p-alpha",
       description: "控制台导出",
+      agent: "octopus-developer",
       status: "todo",
     })
   })

@@ -7,6 +7,7 @@ export interface TaskRecord {
   requirementId: string
   projectId: string
   status: TaskStatus
+  agent?: string
   agentSessionId?: string
   agentSummary?: string
   createdAt: string
@@ -16,6 +17,7 @@ export interface TaskRecord {
 export interface TaskDraft {
   title: string
   description?: string
+  agent?: string
 }
 
 export type TaskPatch = Partial<

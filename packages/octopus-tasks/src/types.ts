@@ -2,6 +2,15 @@ export type TaskStatus = "todo" | "doing" | "review" | "done"
 
 export const TASK_STATUSES: readonly TaskStatus[] = ["todo", "doing", "review", "done"]
 
+/** 任务状态变更事件（ctx 事件总线）：载荷为变更后的任务记录 */
+export const TASK_STATUS_CHANGED_EVENT = "octopus-tasks/task-status-changed"
+
+declare module "@deepseek-ai/cordis" {
+  interface Events {
+    "octopus-tasks/task-status-changed"(record: TaskRecord): void
+  }
+}
+
 export interface TaskRecord {
   id: string
   title: string
@@ -9,6 +18,8 @@ export interface TaskRecord {
   requirementId: string
   projectId: string
   status: TaskStatus
+  /** 执行该任务的智能体角色 id（如 octopus-developer / octopus-designer；缺省用平台默认预设） */
+  agent?: string
   /** 任务子会话 id（octopus-workflow 内部写入；REST 客户端不可指定） */
   agentSessionId?: string
   /** 子 agent 完成时自报的简短总结（octopus-workflow 内部写入） */
@@ -21,6 +32,7 @@ export interface TaskRecord {
 export interface TaskDraft {
   title: string
   description?: string
+  agent?: string
 }
 
 /** 单条创建入参（requirementId/projectId 必填）*/

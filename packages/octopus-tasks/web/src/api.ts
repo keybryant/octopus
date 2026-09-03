@@ -51,6 +51,7 @@ export async function createTask(input: {
   requirementId: string
   projectId?: string
   description?: string
+  agent?: string
 }): Promise<TaskRecord> {
   return request<TaskRecord>(BASE, {
     method: "POST",

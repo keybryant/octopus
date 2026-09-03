@@ -1,5 +1,13 @@
 export type AgentPresetLike = string
-export interface SessionMeta { id: string; createdAt: string; cwd: string | null; title: string | null; live: boolean }
+export interface SessionMeta {
+  id: string
+  createdAt: string
+  cwd: string | null
+  title: string | null
+  live: boolean
+  /** 会话创建时使用的 agent 预设（dsh 会话头持久化字段；非 live 会话从快照头读取） */
+  agentPreset?: string
+}
 export type AgentStreamEvent = { idx: number } & (
   | { type: "status"; status: "idle" | "running" }
   | { type: "user-message"; text: string }
@@ -17,7 +25,14 @@ export interface CreateSessionInput {
   provider?: string
   model?: string
 }
-export interface PresetInfo { id: string; name?: string; description?: string }
+export interface PresetInfo {
+  id: string
+  name?: string
+  description?: string
+  /** 该智能体预设单独指定的模型（未指定时为 undefined，用平台默认） */
+  provider?: string
+  model?: string
+}
 export interface SessionContextInfo {
   live: boolean
   provider?: string

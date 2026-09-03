@@ -1,11 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Context } from "@deepseek-ai/cordis"
 import Storage from "@deepseek-ai/dsh-storage"
 import * as JsonStorage from "@deepseek-ai/dsh-storage-json"
 import * as DomainStorage from "@deepseek-ai/dsh-storage-domain"
+import { TASK_STATUS_CHANGED_EVENT } from "./types.js"
 import { TaskStore } from "./store.js"
 
 async function createHarness() {
@@ -239,5 +240,64 @@ describe("TaskStore agent session fields", () => {
     const reopened = await store.reopen(task.id)
     expect(reopened.status).toBe("todo")
     await expect(store.reopen("TASK-9999")).rejects.toMatchObject({ code: "not-found" })
+  })
+})
+
+describe("TaskStore agent 字段", () => {
+  let harness: Awaited<ReturnType<typeof createHarness>>
+  let store: TaskStore
+
+  beforeEach(async () => {
+    harness = await createHarness()
+    store = harness.store
+  })
+
+  afterEach(async () => {
+    await store.close()
+    await rm(harness.root, { recursive: true, force: true })
+  })
+
+  it("create/createBatch 写入并修剪 agent 字段", async () => {
+    const single = await store.create({
+      title: "A",
+      requirementId: "REQ-100",
+      projectId: "p-alpha",
+      agent: "  octopus-developer  ",
+    })
+    expect(single.agent).toBe("octopus-developer")
+
+    const [batched] = await store.createBatch({
+      requirementId: "REQ-100",
+      projectId: "p-alpha",
+      tasks: [{ title: "B", agent: "octopus-designer" }, { title: "C" }],
+    })
+    expect(batched.agent).toBe("octopus-designer")
+    expect(store.list().find((t) => t.id === "TASK-2802")?.agent).toBeUndefined()
+  })
+
+  it("agent 缺省不写字段；空串 agent 拒绝", async () => {
+    const plain = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+    expect("agent" in plain).toBe(false)
+    await expect(
+      store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha", agent: "  " }),
+    ).rejects.toMatchObject({ code: "invalid-input" })
+    await expect(
+      store.createBatch({ requirementId: "REQ-100", projectId: "p-alpha", tasks: [{ title: "A", agent: "" }] }),
+    ).rejects.toMatchObject({ code: "invalid-input" })
+  })
+
+  it("状态实际变更时派发 TASK_STATUS_CHANGED_EVENT（载荷为变更后记录）；无变化不派发", async () => {
+    const listener = vi.fn()
+    harness.ctx.on(TASK_STATUS_CHANGED_EVENT, listener)
+    const task = await store.create({ title: "A", requirementId: "REQ-100", projectId: "p-alpha" })
+
+    await store.update(task.id, { status: "doing" })
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ id: "TASK-2800", status: "doing" }))
+
+    // 非状态字段更新 / 状态未变化 → 不派发
+    await store.update(task.id, { title: "A2" })
+    await store.update(task.id, { status: "doing" })
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })

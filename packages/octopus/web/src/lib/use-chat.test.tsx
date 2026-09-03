@@ -41,6 +41,7 @@ function createFakeClient() {
     disposeSession: vi.fn(async () => undefined),
     answerApproval: answerApprovalSpy,
     listPresets: vi.fn(async () => [{ id: "standard", name: "标准模式" }]),
+    savePresetModel: vi.fn(async () => undefined),
     getSessionContext: vi.fn(async () => ({ live: true as const })),
     reply: vi.fn(async () => ({ blocks: [] })),
   }
@@ -496,5 +497,56 @@ describe("useChat project binding", () => {
       await result.current.switchSession("pm-1")
     })
     expect(raw().prjA).toBe("pm-1")
+  })
+
+  it("onPresetChange：bootstrap 绑定会话时回传该会话的 agentPreset", async () => {
+    const fake = createFakeClient()
+    const onPresetChange = vi.fn()
+    fake.listSessionsSpy.mockResolvedValue([
+      { id: "pm-1", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: null, live: true, agentPreset: "octopus-pm" },
+    ])
+    renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", onPresetChange }),
+    )
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-1"))
+    expect(onPresetChange).toHaveBeenCalledWith("octopus-pm")
+  })
+
+  it("onPresetChange：创建新 PM 会话时回传创建用的预设", async () => {
+    const fake = createFakeClient()
+    const onPresetChange = vi.fn()
+    fake.listSessionsSpy.mockResolvedValue([])
+    fake.startSessionSpy.mockResolvedValue("pm-new-b")
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", onPresetChange }),
+    )
+    await waitFor(() => expect(fake.startSessionSpy).toHaveBeenCalled())
+    await act(async () => {
+      await result.current.switchProject("prjB", "/ws/b", { agentPreset: "minimal" })
+    })
+    expect(onPresetChange).toHaveBeenLastCalledWith("minimal")
+  })
+
+  it("onPresetChange：switchSession 同步目标会话预设（无预设回传 null）", async () => {
+    const fake = createFakeClient()
+    const onPresetChange = vi.fn()
+    fake.listSessionsSpy.mockResolvedValue([
+      { id: "pm-1", createdAt: "2026-08-28T10:00:00.000Z", cwd: "/ws/a", title: null, live: true, agentPreset: "octopus-developer" },
+      { id: "task-x1", createdAt: "2026-08-28T11:00:00.000Z", cwd: "/ws/a", title: null, live: true },
+    ])
+    const { result } = renderHook(() =>
+      useChat(fake.client, { projectId: "prjA", workspacePath: "/ws/a", onPresetChange }),
+    )
+    await waitFor(() => expect(fake.switchToSpy).toHaveBeenCalledWith("pm-1"))
+
+    await act(async () => {
+      await result.current.switchSession("task-x1")
+    })
+    expect(onPresetChange).toHaveBeenLastCalledWith(null)
+
+    await act(async () => {
+      await result.current.switchSession("pm-1")
+    })
+    expect(onPresetChange).toHaveBeenLastCalledWith("octopus-developer")
   })
 })

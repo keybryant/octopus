@@ -1,0 +1,3 @@
+- insert:
+    - id: octopus-agent-monitor
+      name: octopus-agent-monitor
